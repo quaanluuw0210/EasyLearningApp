@@ -105,22 +105,9 @@ export default function Navbar() {
                       </button>
                     </div>
                   </div>
-
-                    <Link
-                      href="/app"
-                      className="hidden rounded-2xl bg-gradient-to-r from-brand-coral to-brand-flame px-4 py-2.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(255,106,61,0.22)] transition hover:-translate-y-0.5 sm:inline-flex lg:rounded-full lg:px-5 lg:py-2 lg:shadow-glow"
-                    >
-                      Dùng ngay
-                    </Link>
                 </>
               ) : (
                 <>
-                  <Link
-                    href="/app"
-                    className="hidden rounded-2xl bg-gradient-to-r from-brand-coral to-brand-flame px-4 py-2.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(255,106,61,0.22)] transition hover:-translate-y-0.5 sm:inline-flex lg:rounded-full lg:px-5 lg:py-2 lg:shadow-glow"
-                  >
-                    Dùng ngay
-                  </Link>
                   <Link
                     href="/login"
                     className="inline-flex min-h-10 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-brand-coral hover:text-brand-coral hover:shadow-sm lg:rounded-full lg:px-5"

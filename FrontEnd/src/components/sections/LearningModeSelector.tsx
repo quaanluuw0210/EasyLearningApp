@@ -48,8 +48,8 @@ export default function LearningModeSelector({ methods, selected, onSelect }: Le
                   )}
                 </div>
                 <p className="mt-1 text-sm text-slate-500">{method.description}</p>
-                <p className="mt-2 text-xs font-semibold text-slate-600">{method.meta}</p>
               </div>
+
             </button>
           );
         })}

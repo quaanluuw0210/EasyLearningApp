@@ -64,7 +64,7 @@ export default function SidebarNav({
   const [isLoadingCourses, setIsLoadingCourses] = useState(true);
   const [isLoadingTopics, setIsLoadingTopics] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
-
+  const selectedCourse = courses.find((c) => c.courseId === selectedCourseId);
   const currentCourse = courses.find((course) => course.courseId === selectedCourseId) || courses[0];
   const currentTopic = topics.find((topic) => topic.topicId === selectedTopicId) || topics[0];
 
@@ -150,103 +150,97 @@ export default function SidebarNav({
   const handleTopicClick = (topic: TopicItem) => {
     onTopicSelect?.(topic.topicId, topic.title);
   };
-
   return (
     <>
       <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden p-5">
         {user && (
           <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200/70 bg-white/55 shadow-sm">
-            <div className="flex shrink-0 flex-col gap-3 border-b border-slate-200/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="mt-1 text-sm font-semibold text-slate-900">
-                  {isLoadingCourses ? "Đang tải bộ từ vựng..." : currentCourse?.title || "Chưa chọn bộ từ vựng"}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {currentCourse?.description || "Chọn bộ từ vựng để xem chủ đề và từ vựng."}
-                </p>
-              </div>
-              <span className="inline-flex items-center justify-center rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-700 whitespace-nowrap">
-                {topics.length} chủ đề
-              </span>
-            </div>
-            <div className="app-sidebar-scrollbar min-h-0 flex-1 space-y-4 overflow-y-scroll px-4 py-4">
-              {fetchError ? (
-                <div className="rounded-3xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-                  {fetchError}
-                </div>
-              ) : null}
 
-              {courses.length > 1 && (
-                <div className="rounded-3xl border border-slate-200/70 bg-slate-50 p-4">
-                  <p className="text-sm font-semibold text-slate-900">Chọn bộ từ vựng</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {courses.map((course) => {
-                      const isActive = course.courseId === selectedCourseId;
-                      return (
-                        <button
-                          key={course.courseId}
-                          type="button"
-                          onClick={() => handleCourseClick(course)}
-                          className={`rounded-2xl border px-3 py-2 text-sm transition ${
-                            isActive
-                              ? "border-teal-500 bg-teal-500 text-white"
-                              : "border-slate-200 bg-white text-slate-700 hover:border-teal-500 hover:text-teal-700"
-                          }`}
-                        >
-                          {course.title}
-                        </button>
-                      );
-                    })}
-                  </div>
+            {/* 1. ĐÃ TỔNG HỢP: Khối Khóa học / Bộ từ vựng duy nhất (Gọn nhẹ & Tối ưu) */}
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-200/70 px-4 py-3.5 bg-slate-50/50">
+              <div className="min-w-0 flex-1 pr-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-teal-600">
+                    Bộ từ vựng
+                  </span>
+                  {topics.length > 0 && (
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                      {topics.length} chủ đề
+                    </span>
+                  )}
+                </div>
+
+                {/* Nếu có nhiều khóa học, cho chọn qua Select / Dropdown cực tiện */}
+                <h3 className="mt-0.5 truncate text-sm font-bold text-slate-900">
+                  {isLoadingCourses
+                    ? "Đang tải bộ từ vựng..."
+                    : currentCourse?.title || "Chưa chọn bộ từ vựng"}
+                </h3>
+              </div>
+            </div>
+
+            {/* 2. Danh sách Chủ đề (Scroll Area) */}
+            <div className="app-sidebar-scrollbar min-h-0 flex-1 space-y-4 overflow-y-scroll px-4 py-4">
+              {fetchError && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3.5 text-xs font-medium text-rose-700">
+                  {fetchError}
                 </div>
               )}
 
-              {/* If a selectedCourseId prop is provided but courses just loaded, ensure topics load and selection is propagated */}
-              
+              {/* Phần tiêu đề danh sách - Giờ nằm trực tiếp trên sidebar */}
+              <div className="mb-2 flex items-center justify-between px-1">
+                <p className="text-sm font-bold text-slate-900">Danh sách chủ đề</p>
+                <span className="text-[11px] font-semibold text-slate-400">
+                  {topics.length} mục
+                </span>
+              </div>
 
-              <div className="rounded-3xl border border-slate-200/70 bg-slate-50 p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <p className="text-sm font-semibold text-slate-900">Chủ đề</p>
-                  <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                    {topics.length} mục
-                  </span>
+              {isLoadingTopics ? (
+                <div className="p-4 text-center text-xs text-slate-400">
+                  Đang tải chủ đề...
                 </div>
-                {isLoadingTopics ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">
-                    Đang tải chủ đề...
-                  </div>
-                ) : topics.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">
-                    Chưa có chủ đề nào trong bộ từ vựng này.
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {topics.map((topic) => {
-                      const isActive = topic.topicId === selectedTopicId;
-                      return (
-                        <button
-                          key={topic.topicId}
-                          type="button"
-                          onClick={() => handleTopicClick(topic)}
-                          className={`w-full rounded-3xl border px-4 py-3 text-left text-sm transition ${
-                            isActive
-                              ? "border-teal-500 bg-teal-50 text-teal-700"
-                              : "border-slate-200 bg-white text-slate-700 hover:border-teal-500"
-                          }`}
-                        >
-                          <span className="font-semibold">{topic.title}</span>
+              ) : topics.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-400">
+                  Chưa có chủ đề nào trong bộ từ vựng này.
+                </div>
+              ) : (
+                /* Đổi space-y-2 thành space-y-1 cho gọn và hiện đại hơn */
+                <div className="space-y-1">
+                  {topics.map((topic) => {
+                    const isActive = topic.topicId === selectedTopicId;
+                    return (
+                      <button
+                        key={topic.topicId}
+                        type="button"
+                        onClick={() => handleTopicClick(topic)}
+                        /* Đã loại bỏ border hoàn toàn, dùng màu nền phẳng dịu mắt */
+                        className={`w-full rounded-xl px-3.5 py-2.5 text-left text-sm transition-all duration-150 ${
+                          isActive
+                            ? "bg-emerald-50 text-emerald-800 font-semibold shadow-sm"
+                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="truncate">{topic.title}</span>
                           {topic.totalWords ? (
-                            <span className="mt-1 block text-[11px] text-slate-500">
+                            <span
+                              className={`ml-2 shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium transition ${
+                                isActive
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : "bg-slate-100 text-slate-500"
+                              }`}
+                            >
                               {topic.totalWords} từ
                             </span>
                           ) : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
+
           </div>
         )}
       </div>

@@ -148,8 +148,19 @@ export const learningApi = {
     return res.json();
   },
 
-  syncFlashcardProgress: async (payload: GuestSyncRequest) => {
-    const res = await apiFetch(`${API_BASE_URL}/api/v1/learning/progress/sync-guest`, {
+  getTopicFlashcardProgress: async (courseId: string, topicId: string, userId: string) => {
+    const url = new URL(`${API_BASE_URL}/api/v1/learning/courses/${courseId}/topics/${topicId}/flashcard-progress`);
+    url.searchParams.set("user_id", userId);
+    const res = await apiFetch(url.toString());
+    return res.json() as Promise<FlashcardTopicProgress>;
+  },
+
+  saveTopicFlashcardProgress: async (
+    courseId: string,
+    topicId: string,
+    payload: SaveFlashcardTopicProgressRequest
+  ) => {
+    const res = await apiFetch(`${API_BASE_URL}/api/v1/learning/courses/${courseId}/topics/${topicId}/flashcard-progress`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -158,7 +169,22 @@ export const learningApi = {
   },
 };
 
+export interface FlashcardTopicProgress {
+  flashcardCurrentIndex: number;
+  flashcardViewedCards: number[];
+  flashcardUpdatedAt?: string | null;
+}
+
+export interface SaveFlashcardTopicProgressRequest {
+  user_id: string;
+  flashcardCurrentIndex: number;
+  flashcardViewedCards: number[];
+  flashcardUpdatedAt?: string;
+}
+
 export const itineraryApi = {
+
+
   get: async (userId: string) => {
     const res = await apiFetch(`${API_BASE_URL}/api/v1/itinerary/${userId}`);
     return res.json();

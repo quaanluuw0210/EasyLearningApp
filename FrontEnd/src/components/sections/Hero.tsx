@@ -37,7 +37,7 @@ export default function Hero() {
           </p>
           <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
             <Link
-              href="/app"
+              href="/explore"
               className="inline-flex min-h-12 w-full sm:w-auto shrink-0 items-center justify-center rounded-2xl bg-gradient-to-r from-brand-coral to-brand-flame px-6 py-3 text-center text-sm font-semibold text-white shadow-[0_14px_30px_rgba(255,106,61,0.24)] transition hover:-translate-y-0.5 lg:rounded-full lg:shadow-glow"
             >
               Học ngay bây giờ

@@ -7,9 +7,6 @@ export type LearningMethod = {
   id: LearningMethodId;
   label: string;
   description: string;
-  meta: string;
-  progress?: number | null;
-  buttonLabel: string;
   icon: LucideIcon;
 };
 
@@ -18,27 +15,18 @@ export const learningMethods: LearningMethod[] = [
     id: "flashcard",
     label: "Flashcard",
     description: "Học từ vựng bằng Flashcard",
-    meta: "32 / 50 từ đã học",
-    progress: 64,
-    buttonLabel: "Tiếp tục học",
     icon: Sparkles,
   },
   {
     id: "srs",
     label: "Học ngắt quãng",
     description: "Ôn lại những từ bạn sắp quên",
-    meta: "12 từ cần ôn hôm nay",
-    progress: null,
-    buttonLabel: "Bắt đầu ôn",
     icon: Brain,
   },
   {
     id: "vocab",
     label: "Từ vựng",
     description: "Xem và học toàn bộ từ trong chủ đề",
-    meta: "50 từ",
-    progress: null,
-    buttonLabel: "Xem từ vựng",
     icon: BookOpen,
   },
 ];

@@ -74,6 +74,19 @@ class SRSReviewRequest(BaseModel):
     quality: int = Field(..., ge=0, le=5, description="Đánh giá mức độ nhớ từ 0 đến 5")
 
 
+class TopicFlashcardProgressRequest(BaseModel):
+    user_id: str
+    flashcardCurrentIndex: int = Field(0, ge=0)
+    flashcardViewedCards: List[int] = Field(default_factory=list)
+    flashcardUpdatedAt: Optional[datetime] = None
+
+
+class TopicFlashcardProgressResponse(BaseModel):
+    flashcardCurrentIndex: int
+    flashcardViewedCards: List[int]
+    flashcardUpdatedAt: Optional[datetime] = None
+
+
 class GuestSyncItem(BaseModel):
     course_id: str
     topic_id: str
@@ -256,6 +269,49 @@ async def _update_topic_last_studied(user_id: str, course_id: str, topic_id: str
     await asyncio.to_thread(update_doc)
 
 
+async def _get_topic_flashcard_progress(user_id: str, course_id: str, topic_id: str) -> dict:
+    if db is None:
+        return {}
+
+    topic_doc_ref = db.collection("users").document(user_id)
+    topic_doc_ref = topic_doc_ref.collection("course_progress").document(course_id)
+    topic_doc_ref = topic_doc_ref.collection("topic_progress").document(topic_id)
+
+    def read_doc():
+        return topic_doc_ref.get()
+
+    doc = await asyncio.to_thread(read_doc)
+    if doc.exists:
+        return doc.to_dict() or {}
+    return {}
+
+
+async def _save_topic_flashcard_progress(
+    user_id: str,
+    course_id: str,
+    topic_id: str,
+    index: int,
+    viewed_cards: List[int],
+    updated_at: datetime
+):
+    if db is None:
+        return
+
+    topic_doc_ref = db.collection("users").document(user_id)
+    topic_doc_ref = topic_doc_ref.collection("course_progress").document(course_id)
+    topic_doc_ref = topic_doc_ref.collection("topic_progress").document(topic_id)
+
+    def write_doc():
+        topic_doc_ref.set({
+            "flashcardCurrentIndex": index,
+            "flashcardViewedCards": viewed_cards,
+            "flashcardUpdatedAt": updated_at,
+        }, merge=True)
+
+    await asyncio.to_thread(write_doc)
+
+
+
 async def _save_course_history(user_id: str, course_id: str, last_accessed_at: datetime):
     if db is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Firestore client is not initialized.")
@@ -366,7 +422,54 @@ def get_topics_by_course(
     return [TopicItem(**topic) for topic in topics]
 
 
+@router.get("/courses/{course_id}/topics/{topic_id}/flashcard-progress", response_model=TopicFlashcardProgressResponse)
+async def get_topic_flashcard_progress(
+    course_id: str,
+    topic_id: str,
+    user_id: str = Query(..., description="User ID to fetch flashcard progress")
+):
+    data = await _get_topic_flashcard_progress(user_id, course_id, topic_id)
+    return TopicFlashcardProgressResponse(
+        flashcardCurrentIndex=int(data.get("flashcardCurrentIndex", 0)),
+        flashcardViewedCards=list(data.get("flashcardViewedCards", [])),
+        flashcardUpdatedAt=data.get("flashcardUpdatedAt"),
+    )
+
+
+@router.post("/courses/{course_id}/topics/{topic_id}/flashcard-progress")
+async def save_topic_flashcard_progress(
+    course_id: str,
+    topic_id: str,
+    payload: TopicFlashcardProgressRequest
+):
+    now = get_utc_now()
+    updated_at = payload.flashcardUpdatedAt or now
+    await _save_topic_flashcard_progress(
+        user_id=payload.user_id,
+        course_id=course_id,
+        topic_id=topic_id,
+        index=payload.flashcardCurrentIndex,
+        viewed_cards=payload.flashcardViewedCards,
+        updated_at=updated_at,
+    )
+    if db is not None:
+        await _update_topic_last_studied(payload.user_id, course_id, topic_id, updated_at)
+
+    return {
+        "status": "success",
+        "message": "Đã lưu tiến trình Flashcard thành công.",
+        "data": {
+            "course_id": course_id,
+            "topic_id": topic_id,
+            "flashcardCurrentIndex": payload.flashcardCurrentIndex,
+            "flashcardViewedCards": payload.flashcardViewedCards,
+            "flashcardUpdatedAt": updated_at,
+        },
+    }
+
+
 @router.get("/courses/{course_id}/topics/{topic_id}/vocabularies", response_model=List[VocabularyWithSRS])
+
 async def get_topic_vocabularies(
     course_id: str,
     topic_id: str,

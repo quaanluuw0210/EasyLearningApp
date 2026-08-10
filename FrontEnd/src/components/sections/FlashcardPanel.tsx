@@ -1,18 +1,13 @@
 ﻿"use client";
 
-import { ArrowLeft, ArrowRight, Volume2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, Volume2, CheckCircle2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { learningApi, VocabularyWithSRS } from "@/lib/api";
+import { learningApi, VocabularyItem } from "@/lib/api";
 import {
-  createProgressCache,
-  FlashcardProgressCache,
-  FlashcardProgressItem,
-  getProgressCacheFromStorage,
-  mergeProgressItem,
-  saveProgressCacheToStorage,
-  SYNC_ACTION_THRESHOLD,
-  SYNC_INTERVAL_MS,
+  FLASHCARD_SYNC_DEBOUNCE_MS,
+  getFlashcardProgressFromStorage,
+  saveFlashcardProgressToStorage,
 } from "@/lib/flashcardProgress";
 
 type FlashcardPanelProps = {
@@ -22,59 +17,117 @@ type FlashcardPanelProps = {
   topicTitle?: string;
 };
 
-type ReviewAction = "again" | "hard" | "good" | "easy";
-
-const reviewQualityMap: Record<ReviewAction, number> = {
-  again: 0,
-  hard: 3,
-  good: 4,
-  easy: 5,
-};
-
-const defaultProgressItem: FlashcardProgressItem = {
-  vocabId: "",
-  status: "new",
-  repetitions: 0,
-  interval: 0,
-  easeFactor: 2.5,
-  quality: null,
-  lastReviewedAt: null,
-  nextReviewAt: null,
-  updatedAt: new Date().toISOString(),
-};
-
 function speakText(text: string) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) {
     return;
   }
-
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = "en-US";
   window.speechSynthesis.cancel();
   window.speechSynthesis.speak(utterance);
 }
 
-export default function FlashcardPanel({ courseId, courseTitle, topicId, topicTitle }: FlashcardPanelProps) {
+export default function FlashcardPanel({
+  courseId,
+  courseTitle,
+  topicId,
+  topicTitle,
+}: FlashcardPanelProps) {
   const { user } = useAuth();
   const userId = user?.uid ?? "guest";
-  const [vocabList, setVocabList] = useState<VocabularyWithSRS[]>([]);
-  const [progressCache, setProgressCache] = useState<FlashcardProgressCache | null>(null);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [flipped, setFlipped] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<string>("");
-  const [isLoading, setIsLoading] = useState(true);
+
+  const [vocabList, setVocabList] = useState<VocabularyItem[]>([]);
+  const [currentCardIndex, setCurrentCardIndex] = useState<number>(0);
+  const [isFlipped, setIsFlipped] = useState<boolean>(false);
+  const [viewedCards, setViewedCards] = useState<number[]>([]);
+
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const lastSyncRef = useRef<number>(Date.now());
-  const pendingSyncRef = useRef<number | null>(null);
+
+  // Animation states for Page Turn
+  const [isAnimating, setIsAnimating] = useState<boolean>(false);
+  const [animationClass, setAnimationClass] = useState<string>("");
+  const animTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const enterTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Sync ref tracking
+  const actionCounterRef = useRef<number>(0);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const latestStateRef = useRef({ currentCardIndex: 0, viewedCards: [] as number[] });
+
+  // Update latestStateRef whenever state changes
+  useEffect(() => {
+    latestStateRef.current = { currentCardIndex, viewedCards };
+  }, [currentCardIndex, viewedCards]);
+
+
+  const [jumpInput, setJumpInput] = useState("");
 
   const hasValidSelection = Boolean(courseId && topicId);
 
-  const loadVocabularies = useCallback(async () => {
+  // Sync progress to backend/Firebase
+  const syncToServer = useCallback(async () => {
+    if (!courseId || !topicId || !user || userId === "guest") return;
+
+    const { currentCardIndex: idx, viewedCards: viewed } = latestStateRef.current;
+
+    try {
+      await learningApi.saveTopicFlashcardProgress(courseId, topicId, {
+        user_id: userId,
+        flashcardCurrentIndex: idx,
+        flashcardViewedCards: viewed,
+        flashcardUpdatedAt: new Date().toISOString(),
+      });
+      actionCounterRef.current = 0;
+    } catch (err) {
+      console.error("Lỗi đồng bộ Flashcard progress:", err);
+    }
+  }, [courseId, topicId, user, userId]);
+
+
+  
+  // Schedule debounced sync
+  const scheduleSync = useCallback(() => {
+    actionCounterRef.current += 1;
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    // Force sync if actions >= 5 or debounce after 3s
+    if (actionCounterRef.current >= 5) {
+      syncToServer();
+    } else {
+      debounceTimerRef.current = setTimeout(() => {
+        syncToServer();
+      }, FLASHCARD_SYNC_DEBOUNCE_MS);
+    }
+  }, [syncToServer]);
+
+  // Update progress in LocalStorage and schedule sync
+  const updateProgress = useCallback(
+    (newIndex: number, newViewed: number[]) => {
+      if (!courseId || !topicId) return;
+
+      const dataToSave = {
+        currentCardIndex: newIndex,
+        viewedCards: newViewed,
+        updatedAt: new Date().toISOString(),
+      };
+
+      saveFlashcardProgressToStorage(courseId, topicId, dataToSave, userId);
+      scheduleSync();
+    },
+    [courseId, topicId, userId, scheduleSync]
+  );
+
+  // Load vocabularies & restore progress
+  const loadData = useCallback(async () => {
     if (!hasValidSelection) {
       setVocabList([]);
-      setProgressCache(null);
-      setActiveIndex(0);
+      setCurrentCardIndex(0);
+      setIsFlipped(false);
+      setViewedCards([]);
       setIsLoading(false);
       setError(null);
       return;
@@ -84,380 +137,450 @@ export default function FlashcardPanel({ courseId, courseTitle, topicId, topicTi
     setError(null);
 
     try {
-      const data = await learningApi.getVocabularies(courseId!, topicId!, userId === "guest" ? undefined : userId);
-      setVocabList(data || []);
+      // 1. Fetch vocabulary list for topic
+      const data = await learningApi.getVocabularies(courseId!, topicId!);
+      const items: VocabularyItem[] = data || [];
+      setVocabList(items);
 
-      const nowIso = new Date().toISOString();
-      const localCache = getProgressCacheFromStorage(userId, courseId!, topicId!);
-      const mergedItems: Record<string, FlashcardProgressItem> = {};
-      const dirtySet = new Set(localCache?.dirtyItems || []);
+      if (items.length === 0) {
+        setIsLoading(false);
+        return;
+      }
 
-      data.forEach((vocab) => {
-        const localItem = localCache?.items?.[vocab.vocabId];
-        const { item, localWins } = mergeProgressItem(localItem, vocab, nowIso);
-        mergedItems[vocab.vocabId] = item;
-        if (localWins) {
-          dirtySet.add(vocab.vocabId);
-        }
-      });
+      // 2. Restore progress from LocalStorage immediately
+      const localProgress = getFlashcardProgressFromStorage(courseId!, topicId!, userId);
+      let initialIndex = 0;
+      let initialViewed: number[] = [0];
 
-      const nextCache = createProgressCache(
-        userId,
-        courseId!,
-        topicId!,
-        localCache?.currentIndex ?? 0,
-        mergedItems,
-        Array.from(dirtySet),
-        localCache?.lastSyncedAt ?? null
-      );
+      if (localProgress) {
+        initialIndex = Math.min(localProgress.currentCardIndex, items.length - 1);
+        initialViewed = Array.from(new Set([...localProgress.viewedCards, initialIndex]));
+      }
 
-      setProgressCache(nextCache);
-      setActiveIndex(nextCache.currentIndex);
-      saveProgressCacheToStorage(nextCache);
-      setStatusMessage("Đã tải dữ liệu flashcard.");
+      setCurrentCardIndex(initialIndex);
+      setIsFlipped(false);
+      setViewedCards(initialViewed);
+
+      // Save initial state if not in localStorage
+      if (!localProgress) {
+        saveFlashcardProgressToStorage(
+          courseId!,
+          topicId!,
+          {
+            currentCardIndex: initialIndex,
+            viewedCards: initialViewed,
+            updatedAt: new Date().toISOString(),
+          },
+          userId
+        );
+      }
+
+      // 3. Asynchronously fetch backend progress if user is logged in
+      if (user && userId !== "guest") {
+        learningApi
+          .getTopicFlashcardProgress(courseId!, topicId!, userId)
+          .then((remote) => {
+            if (remote && typeof remote.flashcardCurrentIndex === "number") {
+              const remoteIndex = Math.min(remote.flashcardCurrentIndex, items.length - 1);
+              const remoteViewed = remote.flashcardViewedCards || [];
+
+              // Merge viewed cards from local and remote
+              setViewedCards((prevViewed) => {
+                const merged = Array.from(new Set([...prevViewed, ...remoteViewed])).sort((a, b) => a - b);
+
+                // Keep local index if user has already navigated, otherwise remote index
+                setCurrentCardIndex((prevIdx) => {
+                  const finalIdx = prevIdx > 0 ? prevIdx : remoteIndex;
+                  saveFlashcardProgressToStorage(
+                    courseId!,
+                    topicId!,
+                    {
+                      currentCardIndex: finalIdx,
+                      viewedCards: merged,
+                      updatedAt: new Date().toISOString(),
+                    },
+                    userId
+                  );
+                  return finalIdx;
+                });
+
+                return merged;
+              });
+            }
+          })
+          .catch((err) => {
+            console.log("Remote progress not available yet:", err);
+          });
+      }
     } catch (err) {
       console.error(err);
-      setError("Không thể tải flashcard cho chủ đề này.");
-      setVocabList([]);
-      setProgressCache(null);
+      setError("Không thể tải danh sách từ vựng cho chủ đề này.");
     } finally {
       setIsLoading(false);
     }
-  }, [courseId, topicId, userId, hasValidSelection]);
+  }, [courseId, topicId, userId, hasValidSelection, user]);
 
-  const syncProgressToServer = useCallback(async () => {
-    if (!progressCache || !user || userId === "guest") {
-      return;
-    }
+const handleJumpToCard = useCallback(() => {
+  if (vocabList.length === 0 || isAnimating) return;
 
-    const dirtyIds = progressCache.dirtyItems;
-    if (!dirtyIds.length) {
-      return;
-    }
+  const cardNumber = Number(jumpInput);
 
-    setIsSyncing(true);
-    setStatusMessage("Đang đồng bộ tiến trình...");
+  if (!Number.isInteger(cardNumber)) return;
 
-    const itemsToSync = dirtyIds
-      .map((vocabId) => progressCache.items[vocabId])
-      .filter((item): item is FlashcardProgressItem => Boolean(item));
+  if (cardNumber < 1 || cardNumber > vocabList.length) {
+    return;
+  }
 
-    if (!itemsToSync.length) {
-      setIsSyncing(false);
-      return;
-    }
+  const targetIndex = cardNumber - 1;
 
-    try {
-      await learningApi.syncFlashcardProgress({
-        user_id: userId,
-        reviews: itemsToSync.map((item) => ({
-          course_id: courseId ?? "",
-          topic_id: topicId ?? "",
-          vocab_id: item.vocabId,
-          quality: item.quality ?? 0,
-          reviewed_at: item.lastReviewedAt ?? new Date().toISOString(),
-        })),
-      });
+  setIsFlipped(false);
+  setCurrentCardIndex(targetIndex);
 
-      const syncedCache: FlashcardProgressCache = {
-        ...progressCache,
-        dirtyItems: [],
-        lastSyncedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
+  setViewedCards((prev) => {
+    const nextViewed = prev.includes(targetIndex)
+      ? prev
+      : [...prev, targetIndex].sort((a, b) => a - b);
 
-      setProgressCache(syncedCache);
-      saveProgressCacheToStorage(syncedCache);
-      lastSyncRef.current = Date.now();
-      setStatusMessage("Đã đồng bộ thành công.");
-    } catch (err) {
-      console.error("Sync flashcard failed", err);
-      setStatusMessage("Đã lưu trên thiết bị. Đồng bộ sẽ thử lại sau.");
-    } finally {
-      setIsSyncing(false);
-    }
-  }, [courseId, progressCache, topicId, user, userId]);
+    updateProgress(targetIndex, nextViewed);
 
-  const scheduleSync = useCallback(() => {
-    if (pendingSyncRef.current) return;
-    pendingSyncRef.current = window.setTimeout(() => {
-      pendingSyncRef.current = null;
-      syncProgressToServer();
-    }, SYNC_INTERVAL_MS);
-  }, [syncProgressToServer]);
+    return nextViewed;
+  });
 
-  const updateProgressCache = useCallback(
-    (updater: (current: FlashcardProgressCache) => FlashcardProgressCache) => {
-      setProgressCache((current) => {
-        if (!current) return current;
-        const next = updater(current);
-        saveProgressCacheToStorage(next);
-
-        if (next.dirtyItems.length >= SYNC_ACTION_THRESHOLD) {
-          syncProgressToServer();
-        } else if (Date.now() - lastSyncRef.current >= SYNC_INTERVAL_MS) {
-          syncProgressToServer();
-        } else {
-          scheduleSync();
-        }
-
-        return next;
-      });
-    },
-    [scheduleSync, syncProgressToServer]
-  );
-
-  const handleReview = useCallback(
-    (action: ReviewAction) => {
-      if (!progressCache || vocabList.length === 0) return;
-      const currentVocab = vocabList[activeIndex];
-      if (!currentVocab) return;
-      const quality = reviewQualityMap[action];
-      const currentItem = progressCache.items[currentVocab.vocabId] ?? defaultProgressItem;
-      const nowIso = new Date().toISOString();
-      const updatedItem: FlashcardProgressItem = {
-        ...currentItem,
-        vocabId: currentVocab.vocabId,
-        status: "learning",
-        repetitions: currentItem.repetitions + 1,
-        interval: currentItem.interval + 1,
-        easeFactor: Math.max(1.3, currentItem.easeFactor + (quality === 5 ? 0.1 : quality === 4 ? 0.05 : quality === 3 ? 0 : -0.1)),
-        quality,
-        lastReviewedAt: nowIso,
-        nextReviewAt: new Date(Date.now() + (currentItem.interval + 1) * 24 * 60 * 60 * 1000).toISOString(),
-        updatedAt: nowIso,
-      };
-
-      updateProgressCache((current) => {
-        const nextItems = {
-          ...current.items,
-          [currentVocab.vocabId]: updatedItem,
-        };
-        const nextDirty = Array.from(new Set([...current.dirtyItems, currentVocab.vocabId]));
-        return {
-          ...current,
-          items: nextItems,
-          dirtyItems: nextDirty,
-          updatedAt: nowIso,
-        };
-      });
-
-      setFlipped(false);
-      setStatusMessage(`Đã đánh giá: ${action}.`);
-
-      if (activeIndex >= vocabList.length - 1) {
-        syncProgressToServer();
-      }
-    },
-    [activeIndex, progressCache, syncProgressToServer, updateProgressCache, vocabList]
-  );
-
-  const handlePrev = useCallback(() => {
-    setFlipped(false);
-    setActiveIndex((prev) => {
-      const next = Math.max(0, prev - 1);
-      if (progressCache) {
-        updateProgressCache((current) => ({ ...current, currentIndex: next, updatedAt: new Date().toISOString() }));
-      }
-      return next;
-    });
-  }, [progressCache, updateProgressCache]);
-
-  const handleNext = useCallback(() => {
-    setFlipped(false);
-    setActiveIndex((prev) => {
-      const next = Math.min(vocabList.length - 1, prev + 1);
-      if (progressCache) {
-        updateProgressCache((current) => ({ ...current, currentIndex: next, updatedAt: new Date().toISOString() }));
-      }
-      return next;
-    });
-  }, [progressCache, updateProgressCache, vocabList.length]);
-
-  const handleFlip = useCallback(() => setFlipped((prev) => !prev), []);
-
+  setJumpInput("");
+}, [
+  jumpInput,
+  vocabList.length,
+  isAnimating,
+  updateProgress,
+]);
   useEffect(() => {
-    loadVocabularies();
+    loadData();
     return () => {
-      if (pendingSyncRef.current) {
-        window.clearTimeout(pendingSyncRef.current);
-        pendingSyncRef.current = null;
-      }
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      if (animTimeoutRef.current) clearTimeout(animTimeoutRef.current);
+      if (enterTimeoutRef.current) clearTimeout(enterTimeoutRef.current);
     };
-  }, [loadVocabularies]);
+  }, [loadData]);
 
+  // Flush remaining progress on unmount or page hide
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === "hidden") {
-        syncProgressToServer();
+        syncToServer();
       }
     };
-
     window.addEventListener("visibilitychange", handleVisibility);
-    return () => window.removeEventListener("visibilitychange", handleVisibility);
-  }, [syncProgressToServer]);
+    return () => {
+      window.removeEventListener("visibilitychange", handleVisibility);
+      syncToServer();
+    };
+  }, [syncToServer]);
 
-  const currentVocab = vocabList[activeIndex];
+  // Handle card flipping (Front ↔ Back)
+  const handleFlip = useCallback(() => {
+    if (isAnimating) return; // Prevent flip during page turn animation
+    setIsFlipped((prev) => !prev);
 
-  const learnedCount = useMemo(
-    () => vocabList.filter((vocab) => {
-      const item = progressCache?.items[vocab.vocabId];
-      return item !== undefined && item.quality !== null && item.quality >= 3;
-    }).length,
-    [progressCache, vocabList]
-  );
+    // Mark current card as viewed when flipped
+    setViewedCards((prev) => {
+      if (!prev.includes(currentCardIndex)) {
+        const nextViewed = [...prev, currentCardIndex].sort((a, b) => a - b);
+        updateProgress(currentCardIndex, nextViewed);
+        return nextViewed;
+      }
+      return prev;
+    });
+  }, [currentCardIndex, isAnimating, updateProgress]);
+
+  // Handle Next card with Page-Turn Animation
+  const handleNext = useCallback(() => {
+    if (vocabList.length === 0 || isAnimating) return;
+    const nextIdx = Math.min(vocabList.length - 1, currentCardIndex + 1);
+    if (nextIdx === currentCardIndex) return;
+
+    setIsAnimating(true);
+    setAnimationClass("animate-page-turn-next");
+
+    if (animTimeoutRef.current) clearTimeout(animTimeoutRef.current);
+    if (enterTimeoutRef.current) clearTimeout(enterTimeoutRef.current);
+
+    animTimeoutRef.current = setTimeout(() => {
+      setIsFlipped(false); // Reset isFlipped to false
+      setCurrentCardIndex(nextIdx);
+
+      setViewedCards((prev) => {
+        const nextViewed = prev.includes(nextIdx) ? prev : [...prev, nextIdx].sort((a, b) => a - b);
+        updateProgress(nextIdx, nextViewed);
+        return nextViewed;
+      });
+
+      setAnimationClass("animate-page-enter-next");
+
+      enterTimeoutRef.current = setTimeout(() => {
+        setAnimationClass("");
+        setIsAnimating(false);
+      }, 180);
+    }, 380);
+  }, [currentCardIndex, vocabList.length, isAnimating, updateProgress]);
+
+  // Handle Previous card with Page-Turn Animation
+  const handlePrev = useCallback(() => {
+    if (vocabList.length === 0 || isAnimating) return;
+    const prevIdx = Math.max(0, currentCardIndex - 1);
+    if (prevIdx === currentCardIndex) return;
+
+    setIsAnimating(true);
+    setAnimationClass("animate-page-turn-prev");
+
+    if (animTimeoutRef.current) clearTimeout(animTimeoutRef.current);
+    if (enterTimeoutRef.current) clearTimeout(enterTimeoutRef.current);
+
+    animTimeoutRef.current = setTimeout(() => {
+      setIsFlipped(false); // Reset isFlipped to false
+      setCurrentCardIndex(prevIdx);
+
+      setViewedCards((prev) => {
+        const nextViewed = prev.includes(prevIdx) ? prev : [...prev, prevIdx].sort((a, b) => a - b);
+        updateProgress(prevIdx, nextViewed);
+        return nextViewed;
+      });
+
+      setAnimationClass("animate-page-enter-prev");
+
+      enterTimeoutRef.current = setTimeout(() => {
+        setAnimationClass("");
+        setIsAnimating(false);
+      }, 180);
+    }, 380);
+  }, [currentCardIndex, vocabList.length, isAnimating, updateProgress]);
+
+  // Mobile swipe gestures
+  const touchStartXRef = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartXRef.current === null) return;
+    const deltaX = e.changedTouches[0].clientX - touchStartXRef.current;
+    touchStartXRef.current = null;
+
+    if (deltaX < -50) {
+      handleNext();
+    } else if (deltaX > 50) {
+      handlePrev();
+    }
+  };
+
+  const currentVocab = vocabList[currentCardIndex];
+  const viewedCount = viewedCards.length;
+  const totalCount = vocabList.length;
 
   if (isLoading) {
     return (
-      <div className="rounded-[28px] border border-slate-200/80 bg-white p-8 shadow-sm">
-        <p className="text-sm text-slate-500">Đang tải flashcard...</p>
+      <div className="flex items-center justify-center rounded-[28px] border border-slate-200/80 bg-white p-12 shadow-sm min-h-[350px]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-teal-500 border-t-transparent" />
+          <p className="text-sm font-medium text-slate-500">Đang tải flashcard...</p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-[28px] border border-rose-200 bg-rose-50 p-8 shadow-sm">
-        <p className="text-sm text-rose-700">{error}</p>
+      <div className="rounded-[28px] border border-rose-200 bg-rose-50 p-8 text-center shadow-sm">
+        <p className="text-sm font-semibold text-rose-700">{error}</p>
+        <button
+          type="button"
+          onClick={loadData}
+          className="mt-4 inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-rose-700"
+        >
+          Thử lại
+        </button>
       </div>
     );
   }
 
-  if (!currentVocab) {
+  if (!currentVocab || totalCount === 0) {
     return (
-      <div className="rounded-[28px] border border-slate-200 bg-white p-8 shadow-sm">
-        <p className="text-sm text-slate-500">Chọn một chủ đề và bật Flashcard để bắt đầu.</p>
+      <div className="rounded-[28px] border border-slate-200 bg-white p-10 text-center shadow-sm">
+        <p className="text-sm font-medium text-slate-500">
+          Vui lòng chọn một chủ đề trong thanh bên để bắt đầu xem Flashcard.
+        </p>
       </div>
     );
   }
+return (
+  <div className="space-y-6 select-none">
 
-  return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{courseTitle || "Khóa học chưa chọn"}</p>
-          <h2 className="mt-1 text-xl font-bold text-slate-900">{topicTitle || "Chủ đề chưa chọn"}</h2>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          {learnedCount} / {vocabList.length} từ đã học
-        </div>
+    {/* 1. Header Navigation */}
+    <div className="flex w-full items-center justify-between">
+      <div className="text-xs font-semibold text-slate-500 sm:text-sm">
+        Đã xem: {viewedCount}/{totalCount}
       </div>
 
-      <div className="relative mx-auto w-full max-w-2xl overflow-visible">
+      {/* ĐÃ SỬA: Tông xanh lá nhạt dịu mắt cho Badge nhảy thẻ */}
+      <div className="flex items-center rounded-xl bg-emerald-50/80 px-2.5 py-1 text-xs font-semibold text-emerald-700 sm:px-3 sm:py-1.5">
+        <span className="mr-1">Thẻ</span>
+        <input
+          type="number"
+          min={1}
+          max={totalCount}
+          value={jumpInput}
+          placeholder={`${currentCardIndex + 1}`}
+          disabled={isAnimating}
+          onChange={(e) => setJumpInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleJumpToCard();
+          }}
+          className="w-7 bg-transparent p-0 text-center text-xs font-bold text-emerald-700 outline-none placeholder:text-emerald-700 sm:w-8"
+        />
+        <span className="mx-0.5 text-emerald-500/80">/ {totalCount}</span>
+      </div>
+    </div>
+
+    {/* 2. Main 3D Flip Card Container */}
+    <div
+      className="relative mx-auto w-full max-w-xl overflow-visible perspective-1200"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
+      <div className={`w-full ${animationClass}`}>
         <button
           type="button"
           onClick={handleFlip}
           aria-label="Lật thẻ"
-          className="relative h-96 w-full cursor-pointer rounded-[28px] bg-slate-50 text-left shadow-xl transition-transform duration-500 ease-out hover:shadow-2xl"
+          className="relative h-80 w-full cursor-pointer rounded-[32px] bg-transparent text-left transition-all duration-300 ease-out hover:-translate-y-1 sm:h-96"
           style={{
             transformStyle: "preserve-3d",
-            transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+            transform: isFlipped ? "rotateY(180deg)" : "rotateY(0deg)",
           }}
         >
+          {/* FRONT SIDE */}
           <div
-            className="absolute inset-0 flex flex-col justify-between rounded-[28px] border border-slate-200/80 bg-white p-6 shadow-sm"
+            className="absolute inset-0 flex flex-col justify-between rounded-[32px] bg-white p-7 shadow-xl shadow-slate-200/50 ring-1 ring-slate-100"
             style={{ backfaceVisibility: "hidden" }}
           >
-            <div className="flex items-center justify-center">
-              <span className="text-xs font-medium text-slate-400">Chạm để lật thẻ</span>
+            {/* Header nhỏ phía trên */}
+            <div className="flex justify-center text-xs font-medium text-slate-400">
+              <span>Chạm để lật thẻ</span>
             </div>
-            <div className="my-auto flex flex-col items-center justify-center text-center gap-4">
-              <div className="space-y-3">
-                <h3 className="text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">{currentVocab.word || "-"}</h3>
-                {currentVocab.wordDisplay && <p className="text-base font-semibold text-teal-600">{currentVocab.wordDisplay}</p>}
-                {currentVocab.phonetic && <p className="text-lg font-medium text-slate-500">{currentVocab.phonetic}</p>}
+
+            {/* Nội dung chính căn giữa */}
+            <div className="my-auto flex flex-col items-center justify-center gap-4 text-center">
+              <div className="space-y-1.5">
+                {/* Từ vựng chính */}
+                <h3 className="text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl">
+                  {currentVocab.word || "-"}
+                </h3>
+
+                {/* ĐÃ SỬA: Từ loại (v) màu xanh dịu */}
+                <div className="flex items-center justify-center gap-1.5 text-base font-medium text-slate-500">
+                  {currentVocab.partOfSpeech && (
+                    <span className="font-semibold text-emerald-600/90">
+                      ({currentVocab.partOfSpeech})
+                    </span>
+                  )}
+                  {currentVocab.phonetic && (
+                    <span>{currentVocab.phonetic}</span>
+                  )}
+                </div>
               </div>
+
+              {/* ĐÃ SỬA: Nút Nghe phát âm dịu nhẹ */}
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   speakText(currentVocab.word);
                 }}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-emerald-500 hover:bg-emerald-500 hover:text-white"
+                className="inline-flex items-center gap-2 rounded-full bg-slate-100/70 px-5 py-2.5 text-xs font-semibold text-slate-600 transition hover:bg-emerald-50 hover:text-emerald-700 active:scale-95"
               >
-                <Volume2 size={16} /> Phát âm
+                <Volume2 size={16} /> Nghe phát âm
               </button>
             </div>
-            <div className="h-4" />
+
+            {/* ĐÃ SỬA: Footer trạng thái đã xem màu xanh nhạt nhẹ nhàng */}
+            <div className="flex justify-center text-xs font-medium text-slate-400">
+              {viewedCards.includes(currentCardIndex) ? (
+                <span className="inline-flex items-center gap-1 text-emerald-600/80 font-medium">
+                  <CheckCircle2 size={14} /> Đã xem qua card này
+                </span>
+              ) : (
+                <span>Thẻ mới</span>
+              )}
+            </div>
           </div>
 
+          {/* BACK SIDE */}
           <div
-            className="absolute inset-0 flex flex-col justify-between rounded-[28px] border border-slate-200/80 bg-white p-6 shadow-sm"
+            className="absolute inset-0 flex flex-col justify-between rounded-[32px] bg-gradient-to-b from-emerald-50/30 to-white p-7 shadow-xl shadow-slate-200/50 ring-1 ring-emerald-100/50"
             style={{
               backfaceVisibility: "hidden",
               transform: "rotateY(180deg)",
             }}
           >
+            <div className="flex justify-center text-xs font-medium text-slate-400">
+              <span>Chạm để xoay lại</span>
+            </div>
+
             <div className="my-auto space-y-4 text-center">
               <div>
-                <p className="text-xl font-semibold text-slate-900">{currentVocab.meaningVi || "Không có nghĩa"}</p>
-                {currentVocab.partOfSpeech && <p className="mt-2 text-sm font-medium uppercase tracking-[0.15em] text-slate-500">{currentVocab.partOfSpeech}</p>}
-                {currentVocab.phonetic && <p className="mt-1 text-sm text-slate-500">{currentVocab.phonetic}</p>}
+                <p className="text-2xl font-bold text-slate-900 sm:text-3xl">
+                  {currentVocab.meaningVi || "Chưa có nghĩa"}
+                </p>
               </div>
-              {currentVocab.exampleSentence ? (
-                <div className="mx-auto max-w-md rounded-2xl bg-slate-50 p-4 border border-slate-100">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Ví dụ</p>
-                  <p className="mt-2 text-sm font-medium italic leading-relaxed text-slate-700">"{currentVocab.exampleSentence}"</p>
+
+              {/* ĐÃ SỬA: Khối ví dụ dịu mắt */}
+              {currentVocab.exampleSentence && (
+                <div className="mx-auto max-w-md rounded-2xl bg-emerald-50/30 p-4 ring-1 ring-emerald-100/60">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-700/80">
+                    Ví dụ
+                  </p>
+                  <p className="mt-1 text-sm font-medium italic text-slate-700 leading-relaxed">
+                    "{currentVocab.exampleSentence}"
+                  </p>
                 </div>
-              ) : (
-                <p className="text-sm text-slate-500">Không có ví dụ.</p>
               )}
             </div>
-            <div className="h-4" />
+
+            <div className="flex justify-center text-xs font-medium text-slate-400">
+              {viewedCards.includes(currentCardIndex) ? (
+                <span className="inline-flex items-center gap-1 text-emerald-600/80 font-medium">
+                  <CheckCircle2 size={14} /> Đã xem qua card này
+                </span>
+              ) : (
+                <span>Thẻ mới</span>
+              )}
+            </div>
           </div>
         </button>
       </div>
-
-      <div className="flex w-full items-center gap-3">
-        <button
-          type="button"
-          onClick={handlePrev}
-          disabled={activeIndex === 0}
-          className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <ArrowLeft size={16} /> Quay lại
-        </button>
-        <button
-          type="button"
-          onClick={handleNext}
-          disabled={activeIndex >= vocabList.length - 1}
-          className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Tiếp theo <ArrowRight size={16} />
-        </button>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-        <div className="rounded-2xl border border-slate-200/80 bg-slate-50 p-4 text-sm text-slate-700">
-          <p className="font-semibold text-slate-900">{activeIndex + 1} / {vocabList.length}</p>
-          <p className="text-slate-500">{progressCache?.dirtyItems.length ? `${progressCache.dirtyItems.length} mục chưa đồng bộ` : "Đã đồng bộ"}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {(["again", "hard", "good", "easy"] as ReviewAction[]).map((action) => (
-            <button
-              type="button"
-              key={action}
-              onClick={() => handleReview(action)}
-              className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${
-                action === "again"
-                  ? "bg-rose-500 text-white hover:bg-rose-600"
-                  : action === "hard"
-                  ? "bg-amber-500 text-white hover:bg-amber-600"
-                  : action === "good"
-                  ? "bg-sky-500 text-white hover:bg-sky-600"
-                  : "bg-emerald-500 text-white hover:bg-emerald-600"
-              }`}
-            >
-              {action === "again" ? "Again" : action === "hard" ? "Hard" : action === "good" ? "Good" : "Easy"}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-slate-200/80 bg-slate-50 p-4 text-sm text-slate-600">
-        <p>{statusMessage}</p>
-        {isSyncing && <p className="mt-1 text-xs text-slate-500">Đang đồng bộ...</p>}
-      </div>
     </div>
-  );
+
+    {/* 3. Navigation Controls */}
+    <div className="mx-auto flex w-full max-w-xl items-center justify-between gap-4">
+      <button
+        type="button"
+        onClick={handlePrev}
+        disabled={currentCardIndex === 0 || isAnimating}
+        className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-white border border-slate-200/80 px-5 py-3.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <ArrowLeft size={18} /> Thẻ trước
+      </button>
+
+      {/* ĐÃ SỬA: Nút "Thẻ tiếp" tông Emerald dịu mát, không bị chói mắt */}
+      <button
+        type="button"
+        onClick={handleNext}
+        disabled={currentCardIndex >= totalCount - 1 || isAnimating}
+        className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 py-3.5 text-sm font-bold text-white shadow-md shadow-emerald-500/15 transition hover:bg-emerald-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Thẻ tiếp <ArrowRight size={18} />
+      </button>
+    </div>
+  </div>
+);
 }
