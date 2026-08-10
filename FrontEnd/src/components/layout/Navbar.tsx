@@ -36,10 +36,10 @@ export default function Navbar() {
                 </span>
             <div className="flex flex-col leading-tight">
               <span className="font-display text-xl font-semibold tracking-tight text-slate-900">
-                ELA
+                VocabMaster
               </span>
               <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">
-                EASY LEARNING ASSISTANT
+                Vocabulary Master
               </span>
             </div>
           </Link>

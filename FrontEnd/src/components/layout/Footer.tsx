@@ -8,12 +8,12 @@ export default function Footer() {
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <span className="font-display text-base font-semibold text-slate-900">
-              ELA
+              VocabMaster
             </span>
             <span>© 2026. Bảo lưu mọi quyền.</span>
           </div>
           <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">
-            EASY LEARNING ASSISTANT
+            VocabMaster là ứng dụng học từ vựng tiếng Anh thông minh, giúp bạn nâng cao vốn từ vựng một cách hiệu quả và thú vị.
           </span>
         </div>
         <Link

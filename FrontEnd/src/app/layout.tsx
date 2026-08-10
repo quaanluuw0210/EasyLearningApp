@@ -4,9 +4,9 @@ import { AuthProvider } from "@/context/AuthContext";
 import AuthWrapper from "@/components/layout/AuthWrapper";
 
 export const metadata: Metadata = {
-  title: "ELA | Học từ vựng tiếng Anh thông minh",
+  title: "VocabMaster | Học từ vựng tiếng Anh thông minh",
   description:
-    "ELA là ứng dụng học từ vựng tiếng Anh thông minh, giúp bạn nâng cao vốn từ vựng một cách hiệu quả và thú vị.",
+    "VocabMaster là ứng dụng học từ vựng tiếng Anh thông minh, giúp bạn nâng cao vốn từ vựng một cách hiệu quả và thú vị.",
 };
 
 export default function RootLayout({

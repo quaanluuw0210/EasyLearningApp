@@ -177,10 +177,10 @@ function LoginContent() {
                 </span>
                 <div className="flex flex-col text-left leading-tight">
                   <span className="font-display text-2xl font-bold tracking-tight text-white lg:text-slate-900">
-                    ELA
+                    VocabMaster
                   </span>
                   <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/75 lg:text-slate-500">
-                    Easy Learning Assistant 
+                    Vocabulary Master 
                   </span>
                 </div>
               </Link>
