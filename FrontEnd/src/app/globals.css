@@ -1,0 +1,117 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Manrope", ui-sans-serif, system-ui;
+  background-color: #f8fafc;
+  background-image: none;
+  color: #0f172a;
+}
+
+@media (min-width: 1024px) {
+  body {
+    background-image: 
+      radial-gradient(circle at 10% 10%, rgba(17, 181, 184, 0.12), transparent 45%),
+      radial-gradient(circle at 90% 0%, rgba(255, 106, 61, 0.16), transparent 40%);
+  }
+}
+
+.text-gradient {
+  background: linear-gradient(90deg, #ff6a3d, #ff3b2f 45%, #0c8bd6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.app-sidebar-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.5) transparent;
+}
+
+.app-sidebar-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.app-sidebar-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.5);
+}
+
+.app-sidebar-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.section-spacing {
+  padding: 6rem 1.5rem;
+}
+
+@media (min-width: 1024px) {
+  .glass {
+    background: rgba(255, 255, 255, 0.68);
+    backdrop-filter: blur(18px);
+    border-color: rgba(148, 163, 184, 0.35);
+  }
+
+  .section-spacing {
+    padding: 8rem 4.5rem;
+  }
+}
+
+@keyframes sonar-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(2.5);
+    opacity: 0;
+  }
+}
+
+.animate-sonar {
+  animation: sonar-pulse 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes float-bounce {
+  0%, 100% {
+    transform: translateY(0) scale(1.1);
+  }
+  50% {
+    transform: translateY(-8px) scale(1.1);
+  }
+}
+
+.animate-float {
+  animation: float-bounce 2s ease-in-out infinite;
+}
+
+@keyframes map-button-shine {
+  0% {
+    transform: translateX(0);
+    opacity: 0;
+  }
+  35% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(420%);
+    opacity: 0;
+  }
+}

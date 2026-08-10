@@ -1,0 +1,41 @@
+{
+  "name": "routeai-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "jest"
+  },
+  "dependencies": {
+    "axios": "^1.17.0",
+    "firebase": "^12.13.0",
+    "framer-motion": "11.3.30",
+    "html2canvas": "1.4.1",
+    "lucide-react": "0.461.0",
+    "maplibre-gl": "^5.24.0",
+    "next": "^14.2.35",
+    "qrcode.react": "^4.2.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-map-gl": "^8.1.1",
+    "react-markdown": "^10.1.0",
+    "sweetalert2": "^11.26.25"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/jest": "^30.0.0",
+    "@types/node": "20.14.10",
+    "@types/react": "18.3.3",
+    "@types/react-dom": "18.3.0",
+    "autoprefixer": "^10.4.19",
+    "jest": "^30.4.2",
+    "jest-environment-jsdom": "^30.4.1",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.6",
+    "typescript": "5.5.4"
+  }
+}
