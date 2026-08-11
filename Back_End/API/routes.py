@@ -199,24 +199,46 @@ def _build_srs_progress(data: dict) -> SRSProgress:
         quality=int(data.get("quality", 0)),
     )
 
-
 def _calculate_sm2(quality: int, ef: float, repetitions: int, interval: int) -> tuple[float, int, int, datetime]:
+    # 1. Cập nhật Ease Factor (EF)
     ef_prime = ef + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02))
     ef_prime = max(1.3, ef_prime)
 
-    if quality < 3:
-        repetitions = 0
-        interval = 1
-    else:
-        if repetitions == 0:
-            interval = 1
-        elif repetitions == 1:
-            interval = 6
-        else:
-            interval = round(interval * ef_prime)
-        repetitions += 1
+    now = get_utc_now()
 
-    next_review_date = get_utc_now() + timedelta(days=interval)
+    # 2. Xử lý các bước MỚI HỌC / HỌC LẠI (Learning Steps - Tính theo PHÚT)
+    # Mapping nút bấm: quality 1=Again (<1m), 2=Hard (<6m), 3=Good (<10m)
+    if quality < 3: # Again hoặc Hard (Thất bại / Khó)
+        repetitions = 0
+        interval = 0  # 0 ngày (đang trong giai đoạn học theo phút)
+        
+        # Quality 1 (Again) -> 1 phút, Quality 2 (Hard) -> 6 phút
+        minutes_add = 1 if quality == 1 else 6 
+        next_review_date = now + timedelta(minutes=minutes_add)
+
+    elif repetitions == 0 and quality == 3: # Good lần đầu tiên -> Bước học 10 phút
+        interval = 0
+        minutes_add = 10
+        next_review_date = now + timedelta(minutes=minutes_add)
+        # Giữ repetitions = 0 để lần sau bấm Good tiếp mới chính thức Graduated sang 1 ngày
+
+    # 3. Xử lý khi từ vựng TỐT NGHIỆP (Graduated - Tính theo NGÀY)
+    else:
+        if repetitions == 0:  # Chọn Easy ngay từ đầu (quality >= 4)
+            interval = 5      # 5 ngày theo nhãn Easy (5d)
+            repetitions = 1
+        elif repetitions == 1: # Đã qua bước 10m, bấm Good tiếp -> Nhảy lên 1 ngày
+            interval = 1
+            repetitions = 2
+        elif repetitions == 2: # Nhảy lên 6 ngày
+            interval = 6
+            repetitions = 3
+        else:                  # Tăng trưởng theo hệ số EF
+            interval = max(1, round(interval * ef_prime))
+            repetitions += 1
+            
+        next_review_date = now + timedelta(days=interval)
+
     return ef_prime, repetitions, interval, next_review_date
 
 
@@ -253,6 +275,31 @@ async def _save_srs_item(user_id: str, course_id: str, topic_id: str, vocab_id: 
         item_ref.set(progress, merge=True)
 
     await asyncio.to_thread(write_item)
+
+
+async def _save_srs_topic_batch(
+    user_id: str,
+    course_id: str,
+    topic_id: str,
+    item_updates: List[tuple[str, dict]],
+    last_studied_at: datetime,
+):
+    if db is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Firestore client is not initialized.")
+
+    topic_ref = db.collection("users").document(user_id)
+    topic_ref = topic_ref.collection("course_progress").document(course_id)
+    topic_ref = topic_ref.collection("topic_progress").document(topic_id)
+
+    def commit_batch():
+        batch = db.batch()
+        for vocab_id, progress in item_updates:
+            item_ref = topic_ref.collection("srs_items").document(vocab_id)
+            batch.set(item_ref, progress, merge=True)
+        batch.set(topic_ref, {"lastStudiedAt": last_studied_at}, merge=True)
+        batch.commit()
+
+    await asyncio.to_thread(commit_batch)
 
 
 async def _update_topic_last_studied(user_id: str, course_id: str, topic_id: str, last_studied_at: datetime):
@@ -306,6 +353,7 @@ async def _save_topic_flashcard_progress(
             "flashcardCurrentIndex": index,
             "flashcardViewedCards": viewed_cards,
             "flashcardUpdatedAt": updated_at,
+            "lastStudiedAt": updated_at,
         }, merge=True)
 
     await asyncio.to_thread(write_doc)
@@ -452,8 +500,6 @@ async def save_topic_flashcard_progress(
         viewed_cards=payload.flashcardViewedCards,
         updated_at=updated_at,
     )
-    if db is not None:
-        await _update_topic_last_studied(payload.user_id, course_id, topic_id, updated_at)
 
     return {
         "status": "success",
@@ -497,7 +543,7 @@ async def get_topic_vocabularies(
 async def review_srs_item(review: SRSReviewRequest):
     if not (0 <= review.quality <= 5):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Quality phải nằm giữa 0 và 5.")
-
+    
     existing_map = await _get_user_srs_map(review.user_id, review.course_id, review.topic_id)
     existing = existing_map.get(review.vocab_id, {})
 
@@ -567,40 +613,53 @@ async def sync_guest_progress(data: GuestSyncRequest, background_tasks: Backgrou
     user_id = data.user_id
     now = get_utc_now()
     results = []
-
+    reviews_by_topic: dict[tuple[str, str], list[GuestSyncItem]] = {}
     for review_item in data.reviews:
-        reviewed_at = review_item.reviewed_at or now
-        existing_map = await _get_user_srs_map(user_id, review_item.course_id, review_item.topic_id)
-        existing = existing_map.get(review_item.vocab_id, {})
+        reviews_by_topic.setdefault((review_item.course_id, review_item.topic_id), []).append(review_item)
 
-        current_ef = float(existing.get("ef", 2.5))
-        current_repetitions = int(existing.get("repetitions", 0))
-        current_interval = int(existing.get("interval", 0))
+    for (course_id, topic_id), topic_reviews in reviews_by_topic.items():
+        existing_map = await _get_user_srs_map(user_id, course_id, topic_id)
+        item_updates_by_vocab: dict[str, dict] = {}
+        last_studied_at = now
 
-        ef_prime, repetitions, interval, next_review_date = _calculate_sm2(
-            review_item.quality, current_ef, current_repetitions, current_interval
+        for review_item in topic_reviews:
+            reviewed_at = review_item.reviewed_at or now
+            last_studied_at = max(last_studied_at, reviewed_at)
+            existing = existing_map.get(review_item.vocab_id, {})
+
+            current_ef = float(existing.get("ef", 2.5))
+            current_repetitions = int(existing.get("repetitions", 0))
+            current_interval = int(existing.get("interval", 0))
+            ef_prime, repetitions, interval, next_review_date = _calculate_sm2(
+                review_item.quality, current_ef, current_repetitions, current_interval
+            )
+
+            progress_record = {
+                "ef": ef_prime,
+                "repetitions": repetitions,
+                "interval": interval,
+                "nextReviewDate": next_review_date,
+                "lastReviewedAt": reviewed_at,
+                "quality": review_item.quality,
+                "updatedAt": now,
+            }
+            existing_map[review_item.vocab_id] = progress_record
+            item_updates_by_vocab[review_item.vocab_id] = progress_record
+            results.append({
+                "course_id": course_id,
+                "topic_id": topic_id,
+                "vocab_id": review_item.vocab_id,
+                "quality": review_item.quality,
+                "nextReviewDate": next_review_date,
+            })
+
+        await _save_srs_topic_batch(
+            user_id,
+            course_id,
+            topic_id,
+            list(item_updates_by_vocab.items()),
+            last_studied_at,
         )
-
-        progress_record = {
-            "ef": ef_prime,
-            "repetitions": repetitions,
-            "interval": interval,
-            "nextReviewDate": next_review_date,
-            "lastReviewedAt": reviewed_at,
-            "quality": review_item.quality,
-            "updatedAt": now,
-        }
-
-        await _save_srs_item(user_id, review_item.course_id, review_item.topic_id, review_item.vocab_id, progress_record)
-        await _update_topic_last_studied(user_id, review_item.course_id, review_item.topic_id, max(reviewed_at, now))
-
-        results.append({
-            "course_id": review_item.course_id,
-            "topic_id": review_item.topic_id,
-            "vocab_id": review_item.vocab_id,
-            "quality": review_item.quality,
-            "nextReviewDate": next_review_date,
-        })
 
     return {
         "status": "success",

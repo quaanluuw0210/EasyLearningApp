@@ -1,4 +1,5 @@
-﻿"use client";
+﻿
+"use client";
 
 import LearningContentPanel from "@/components/sections/LearningContentPanel";
 import type { LearningMethodId } from "@/lib/learningMockData";
@@ -48,22 +49,19 @@ export default function ChatInterface({
   selectedTopicTitle
 }: ChatInterfaceProps) {
   return (
-    /* 1. Xóa `h-full` ở wrapper ngoài cùng */
-    <div className="flex w-full flex-col gap-5 p-4 md:p-6">
+    /* 1. Trả lại h-full & flex-1 cho Wrapper ngoài cùng */
+    <div className="flex h-full w-full min-h-0 flex-1 flex-col gap-5 p-4 md:p-6 overflow-hidden">
       
-      {/* 2. Đổi `h-full min-h-[calc(100vh-150px)]` thành `h-fit` 
-             để khung trắng tự phình to bao trọn 100% nội dung con bên trong */}
-      <div className="flex h-fit w-full flex-col gap-6 rounded-[28px] border border-slate-200/80 bg-white p-6 shadow-sm shadow-slate-200/40">
-        <div className="grid gap-5 xl:grid-cols-[1fr]">
-          <div className="space-y-5">
-            <LearningContentPanel
-              mode={selectedLearningMethod}
-              selectedCourseId={selectedCourseId}
-              selectedCourseTitle={selectedCourseTitle}
-              selectedTopicId={selectedTopicId}
-              selectedTopicTitle={selectedTopicTitle}
-            />
-          </div>
+      {/* 2. Đổi h-fit thành h-full min-h-0 flex-1 để ôm trọn viewport còn lại */}
+      <div className="flex h-full min-h-0 flex-1 flex-col rounded-[28px] border border-slate-200/80 bg-white p-6 shadow-sm shadow-slate-200/40 overflow-hidden">
+        <div className="flex h-full min-h-0 flex-1 flex-col">
+          <LearningContentPanel
+            mode={selectedLearningMethod}
+            selectedCourseId={selectedCourseId}
+            selectedCourseTitle={selectedCourseTitle}
+            selectedTopicId={selectedTopicId}
+            selectedTopicTitle={selectedTopicTitle}
+          />
         </div>
       </div>
     </div>

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { ArrowLeft, ArrowRight, Volume2, CheckCircle2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -6,6 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { learningApi, VocabularyItem } from "@/lib/api";
 import {
   FLASHCARD_SYNC_DEBOUNCE_MS,
+  FLASHCARD_SYNC_ACTION_THRESHOLD,
   getFlashcardProgressFromStorage,
   saveFlashcardProgressToStorage,
 } from "@/lib/flashcardProgress";
@@ -54,6 +55,10 @@ export default function FlashcardPanel({
   const actionCounterRef = useRef<number>(0);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const latestStateRef = useRef({ currentCardIndex: 0, viewedCards: [] as number[] });
+  const lastSyncedStateRef = useRef<string | null>(null);
+  const syncInFlightRef = useRef<Promise<void> | null>(null);
+  const dirtyRef = useRef(false);
+  const loadVersionRef = useRef(0);
 
   // Update latestStateRef whenever state changes
   useEffect(() => {
@@ -68,26 +73,52 @@ export default function FlashcardPanel({
   // Sync progress to backend/Firebase
   const syncToServer = useCallback(async () => {
     if (!courseId || !topicId || !user || userId === "guest") return;
+    if (!dirtyRef.current || actionCounterRef.current === 0) return;
+    if (syncInFlightRef.current) return syncInFlightRef.current;
 
     const { currentCardIndex: idx, viewedCards: viewed } = latestStateRef.current;
+    const stateKey = JSON.stringify({ currentCardIndex: idx, viewedCards: viewed });
+    if (stateKey === lastSyncedStateRef.current) {
+      dirtyRef.current = false;
+      actionCounterRef.current = 0;
+      return;
+    }
 
-    try {
-      await learningApi.saveTopicFlashcardProgress(courseId, topicId, {
+    const request = learningApi
+      .saveTopicFlashcardProgress(courseId, topicId, {
         user_id: userId,
         flashcardCurrentIndex: idx,
         flashcardViewedCards: viewed,
         flashcardUpdatedAt: new Date().toISOString(),
+      })
+      .then(() => {
+        lastSyncedStateRef.current = stateKey;
+        if (JSON.stringify(latestStateRef.current) === stateKey) {
+          dirtyRef.current = false;
+          actionCounterRef.current = 0;
+        }
+      })
+      .catch((err) => {
+        console.error("Lỗi đồng bộ Flashcard progress:", err);
+      })
+      .finally(() => {
+        syncInFlightRef.current = null;
+        if (dirtyRef.current && actionCounterRef.current > 0) {
+          debounceTimerRef.current = setTimeout(() => {
+            void syncToServer();
+          }, FLASHCARD_SYNC_DEBOUNCE_MS);
+        }
       });
-      actionCounterRef.current = 0;
-    } catch (err) {
-      console.error("Lỗi đồng bộ Flashcard progress:", err);
-    }
+
+    syncInFlightRef.current = request;
+    return request;
   }, [courseId, topicId, user, userId]);
 
 
   
   // Schedule debounced sync
   const scheduleSync = useCallback(() => {
+    dirtyRef.current = true;
     actionCounterRef.current += 1;
 
     if (debounceTimerRef.current) {
@@ -95,11 +126,11 @@ export default function FlashcardPanel({
     }
 
     // Force sync if actions >= 5 or debounce after 3s
-    if (actionCounterRef.current >= 5) {
-      syncToServer();
+    if (actionCounterRef.current >= FLASHCARD_SYNC_ACTION_THRESHOLD) {
+      void syncToServer();
     } else {
       debounceTimerRef.current = setTimeout(() => {
-        syncToServer();
+        void syncToServer();
       }, FLASHCARD_SYNC_DEBOUNCE_MS);
     }
   }, [syncToServer]);
@@ -116,6 +147,7 @@ export default function FlashcardPanel({
       };
 
       saveFlashcardProgressToStorage(courseId, topicId, dataToSave, userId);
+      latestStateRef.current = { currentCardIndex: newIndex, viewedCards: newViewed };
       scheduleSync();
     },
     [courseId, topicId, userId, scheduleSync]
@@ -123,6 +155,7 @@ export default function FlashcardPanel({
 
   // Load vocabularies & restore progress
   const loadData = useCallback(async () => {
+    const loadVersion = ++loadVersionRef.current;
     if (!hasValidSelection) {
       setVocabList([]);
       setCurrentCardIndex(0);
@@ -138,8 +171,9 @@ export default function FlashcardPanel({
 
     try {
       // 1. Fetch vocabulary list for topic
-      const data = await learningApi.getVocabularies(courseId!, topicId!);
+      const data = await learningApi.getVocabularies(courseId!, topicId!, userId);
       const items: VocabularyItem[] = data || [];
+      if (loadVersion !== loadVersionRef.current) return;
       setVocabList(items);
 
       if (items.length === 0) {
@@ -180,6 +214,7 @@ export default function FlashcardPanel({
         learningApi
           .getTopicFlashcardProgress(courseId!, topicId!, userId)
           .then((remote) => {
+            if (loadVersion !== loadVersionRef.current) return;
             if (remote && typeof remote.flashcardCurrentIndex === "number") {
               const remoteIndex = Math.min(remote.flashcardCurrentIndex, items.length - 1);
               const remoteViewed = remote.flashcardViewedCards || [];
@@ -190,7 +225,7 @@ export default function FlashcardPanel({
 
                 // Keep local index if user has already navigated, otherwise remote index
                 setCurrentCardIndex((prevIdx) => {
-                  const finalIdx = prevIdx > 0 ? prevIdx : remoteIndex;
+                  const finalIdx = actionCounterRef.current > 0 ? prevIdx : remoteIndex;
                   saveFlashcardProgressToStorage(
                     courseId!,
                     topicId!,
@@ -256,6 +291,7 @@ const handleJumpToCard = useCallback(() => {
   useEffect(() => {
     loadData();
     return () => {
+      loadVersionRef.current += 1;
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       if (animTimeoutRef.current) clearTimeout(animTimeoutRef.current);
       if (enterTimeoutRef.current) clearTimeout(enterTimeoutRef.current);
@@ -266,13 +302,17 @@ const handleJumpToCard = useCallback(() => {
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === "hidden") {
-        syncToServer();
+        void syncToServer();
       }
     };
+    const handleBeforeUnload = () => {
+      void syncToServer();
+    };
     window.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("beforeunload", handleBeforeUnload);
     return () => {
       window.removeEventListener("visibilitychange", handleVisibility);
-      syncToServer();
+      window.removeEventListener("beforeunload", handleBeforeUnload);
     };
   }, [syncToServer]);
 

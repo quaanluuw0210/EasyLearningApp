@@ -88,6 +88,18 @@ export const apiFetch = async (input: RequestInfo, init: RequestInit = {}) => {
 
 const API_BASE_URL = getApiOrigin();
 
+const vocabCache = new Map<string, Promise<VocabularyWithSRS[]>>();
+const progressCache = new Map<string, Promise<FlashcardTopicProgress>>();
+
+export const clearVocabCache = (courseId: string, topicId: string, userId?: string) => {
+  const prefix = `${courseId}_${topicId}_${userId || ""}_`;
+  for (const key of vocabCache.keys()) {
+    if (key.startsWith(prefix)) {
+      vocabCache.delete(key);
+    }
+  }
+};
+
 export const learningApi = {
   getCourses: async (fileName?: string) => {
     const url = new URL(`${API_BASE_URL}/api/v1/learning/courses`);
@@ -116,11 +128,29 @@ export const learningApi = {
     userId?: string,
     fileName?: string
   ) => {
-    const url = new URL(`${API_BASE_URL}/api/v1/learning/courses/${courseId}/topics/${topicId}/vocabularies`);
-    if (userId) url.searchParams.set("user_id", userId);
-    if (fileName) url.searchParams.set("file_name", fileName);
-    const res = await apiFetch(url.toString());
-    return res.json() as Promise<VocabularyWithSRS[]>;
+    const cacheKey = `${courseId}_${topicId}_${userId || ""}_${fileName || ""}`;
+    if (vocabCache.has(cacheKey)) {
+      return vocabCache.get(cacheKey)!;
+    }
+
+    const promise = (async () => {
+      try {
+        const url = new URL(`${API_BASE_URL}/api/v1/learning/courses/${courseId}/topics/${topicId}/vocabularies`);
+        if (userId) url.searchParams.set("user_id", userId);
+        if (fileName) url.searchParams.set("file_name", fileName);
+        const res = await apiFetch(url.toString());
+        if (!res.ok) {
+          throw new Error(`HTTP Error: ${res.status}`);
+        }
+        return await res.json() as VocabularyWithSRS[];
+      } catch (err) {
+        vocabCache.delete(cacheKey);
+        throw err;
+      }
+    })();
+
+    vocabCache.set(cacheKey, promise);
+    return promise;
   },
 
   getDueCards: async (userId: string, fileName?: string) => {
@@ -131,6 +161,7 @@ export const learningApi = {
   },
 
   reviewSrs: async (payload: SRSReviewRequest) => {
+    clearVocabCache(payload.course_id, payload.topic_id, payload.user_id);
     const res = await apiFetch(`${API_BASE_URL}/api/v1/learning/srs/review`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -140,6 +171,13 @@ export const learningApi = {
   },
 
   syncGuestProgress: async (payload: GuestSyncRequest) => {
+    const affected = new Set<string>();
+    payload.reviews.forEach(r => affected.add(`${r.course_id}_${r.topic_id}`));
+    affected.forEach(key => {
+      const [cId, tId] = key.split("_");
+      clearVocabCache(cId, tId, payload.user_id);
+    });
+
     const res = await apiFetch(`${API_BASE_URL}/api/v1/learning/progress/sync-guest`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -149,10 +187,28 @@ export const learningApi = {
   },
 
   getTopicFlashcardProgress: async (courseId: string, topicId: string, userId: string) => {
-    const url = new URL(`${API_BASE_URL}/api/v1/learning/courses/${courseId}/topics/${topicId}/flashcard-progress`);
-    url.searchParams.set("user_id", userId);
-    const res = await apiFetch(url.toString());
-    return res.json() as Promise<FlashcardTopicProgress>;
+    const cacheKey = `${courseId}_${topicId}_${userId}`;
+    if (progressCache.has(cacheKey)) {
+      return progressCache.get(cacheKey)!;
+    }
+
+    const promise = (async () => {
+      try {
+        const url = new URL(`${API_BASE_URL}/api/v1/learning/courses/${courseId}/topics/${topicId}/flashcard-progress`);
+        url.searchParams.set("user_id", userId);
+        const res = await apiFetch(url.toString());
+        if (!res.ok) {
+          throw new Error(`HTTP Error: ${res.status}`);
+        }
+        return await res.json() as FlashcardTopicProgress;
+      } catch (err) {
+        progressCache.delete(cacheKey);
+        throw err;
+      }
+    })();
+
+    progressCache.set(cacheKey, promise);
+    return promise;
   },
 
   saveTopicFlashcardProgress: async (
@@ -160,12 +216,25 @@ export const learningApi = {
     topicId: string,
     payload: SaveFlashcardTopicProgressRequest
   ) => {
-    const res = await apiFetch(`${API_BASE_URL}/api/v1/learning/courses/${courseId}/topics/${topicId}/flashcard-progress`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    return res.json();
+    const cacheKey = `${courseId}_${topicId}_${payload.user_id}`;
+    progressCache.set(cacheKey, Promise.resolve({
+      flashcardCurrentIndex: payload.flashcardCurrentIndex,
+      flashcardViewedCards: payload.flashcardViewedCards,
+      flashcardUpdatedAt: payload.flashcardUpdatedAt || new Date().toISOString(),
+    }));
+
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/api/v1/learning/courses/${courseId}/topics/${topicId}/flashcard-progress`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+      return res.json();
+    } catch (err) {
+      progressCache.delete(cacheKey);
+      throw err;
+    }
   },
 };
 

@@ -80,11 +80,13 @@ export default function VocabPanel({
   }, [searchTerm, vocabList]);
 
   return (
-    <div className="flex flex-col gap-5">
-      {/* 1. Header Banner */}
-      <div className="flex items-center gap-3.5 rounded-[28px] border border-slate-200/80 bg-gradient-to-r from-teal-500/10 via-sky-500/10 to-indigo-500/10 p-5">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-teal-500 text-white shadow-md shadow-teal-500/20">
-          <BookOpen size={22} />
+    /* ĐÃ SỬA: Đổi flex-col gap-5 thành h-full flex flex-col gap-4 overflow-hidden */
+    <div className="flex h-full flex-col gap-4 overflow-hidden">
+      
+      {/* 1. Header Banner (Chiều cao cố định) */}
+      <div className="flex shrink-0 items-center gap-3.5 rounded-[28px] border border-slate-200/80 bg-gradient-to-r from-teal-500/10 via-sky-500/10 to-indigo-500/10 p-4">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-teal-500 text-white shadow-md shadow-teal-500/20">
+          <BookOpen size={20} />
         </div>
         <div>
           <p className="text-[11px] font-bold uppercase tracking-wider text-teal-700">
@@ -93,19 +95,19 @@ export default function VocabPanel({
         </div>
       </div>
 
-      {/* 2. Thanh tìm kiếm từ vựng */}
-      <div className="relative">
+      {/* 2. Thanh tìm kiếm (Chiều cao cố định) */}
+      <div className="relative shrink-0">
         <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
         <input
           type="text"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Tìm kiếm từ vựng hoặc nghĩa tiếng Việt..."
-          className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 py-3 pl-11 pr-4 text-sm font-medium text-slate-800 placeholder-slate-400 outline-none transition focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-500/10"
+          className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 py-2.5 pl-11 pr-4 text-sm font-medium text-slate-800 placeholder-slate-400 outline-none transition focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-500/10"
         />
       </div>
 
-      {/* 3. Danh sách từ vựng */}
+      {/* 3. Danh sách từ vựng (Tự động co giãn & có thanh cuộn mượt) */}
       {isLoading ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">
           Đang tải danh sách từ vựng...
@@ -115,7 +117,8 @@ export default function VocabPanel({
           {error}
         </div>
       ) : (
-        <div className="max-h-[500px] space-y-3 overflow-y-auto pr-1">
+        /* ĐÃ SỬA: Thay max-h-[500px] bằng flex-1 min-h-0 overflow-y-auto */
+        <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1.5 custom-scrollbar">
           {filteredWords.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
               Không tìm thấy từ vựng phù hợp với từ khóa "{searchTerm}"

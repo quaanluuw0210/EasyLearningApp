@@ -4,7 +4,7 @@ export interface FlashcardProgressState {
   updatedAt: string;
 }
 
-export const FLASHCARD_SYNC_DEBOUNCE_MS = 3_000;
+export const FLASHCARD_SYNC_DEBOUNCE_MS = 5_000;
 export const FLASHCARD_SYNC_ACTION_THRESHOLD = 5;
 
 export function getFlashcardProgressKey(courseId: string, topicId: string, userId?: string): string {

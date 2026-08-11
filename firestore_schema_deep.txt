@@ -1,0 +1,45 @@
+=== DETAILED FIRESTORE DATABASE SCHEMA ===
+
+📁 Collection: `courses`
+  📄 Schema (Mẫu từ 3 docs):
+    - `description`: String
+    - `isSystem`: Boolean
+    - `courseId`: String
+    - `title`: String
+    - `totalTopics`: Number
+    - `coverImage`: String
+    - `totalWords`: Number
+    - `note`: String
+
+📁 Collection: `topics`
+  📄 Schema (Mẫu từ 5 docs):
+    - `order`: Number
+    - `title`: String
+    - `totalWords`: Number
+    - `topicId`: String
+    - `courseId`: String
+
+📁 Collection: `users`
+  📄 Schema (Mẫu từ 1 docs):
+    - `uid`: String
+    - `display_name`: String
+    - `updated_at`: DatetimeWithNanoseconds
+    - `email`: String
+    - `role`: String
+    - `last_login`: DatetimeWithNanoseconds
+    - `photo_url`: String
+  📁 Collection: `course_progress`
+    (Collection rỗng)
+
+📁 Collection: `vocabularies`
+  📄 Schema (Mẫu từ 5 docs):
+    - `meaningVi`: String
+    - `partOfSpeech`: String
+    - `stt`: Number
+    - `courseId`: String
+    - `phonetic`: String
+    - `topicId`: String
+    - `exampleSentence`: String
+    - `word`: String
+    - `vocabId`: String
+

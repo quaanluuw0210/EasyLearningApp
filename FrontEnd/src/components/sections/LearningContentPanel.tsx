@@ -32,7 +32,12 @@ export default function LearningContentPanel({
   }
 
   if (mode === "srs") {
-    return <SrsPanel />;
+    return (
+      <SrsPanel
+        courseId={selectedCourseId}
+        topicId={selectedTopicId}
+      />
+    );
   }
 
   return (
