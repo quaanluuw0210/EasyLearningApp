@@ -38,6 +38,8 @@ import type { LearningMethodId } from "@/lib/learningMockData";
 //   };
 // };
 
+const link_back_end="https://easylearningapp.onrender.com/"
+
 type MainDashboardProps = {
   courseIdFromUrl?: string;
   topicIdFromUrl?: string;
@@ -47,7 +49,7 @@ type MainDashboardProps = {
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
-  "https://api.bmi-foodtour.io.vn";
+  link_back_end;
 
 export default function MainDashboard({ courseIdFromUrl, topicIdFromUrl, modeFromUrl }: MainDashboardProps) {
   const router = useRouter();
