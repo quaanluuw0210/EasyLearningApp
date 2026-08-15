@@ -20,7 +20,7 @@ import { useAuth } from "@/context/AuthContext";
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectPath = searchParams.get('callbackUrl') || searchParams.get('redirect') || '/app';
+  const redirectPath = searchParams.get('callbackUrl') || searchParams.get('redirect') || '';
   const { user, loading: authLoading } = useAuth();
 
   useEffect(() => {

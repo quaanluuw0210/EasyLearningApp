@@ -74,7 +74,7 @@ export default function MainDashboard({ courseIdFromUrl, topicIdFromUrl, modeFro
   const topicIdFromQuery = searchParams.get("topicId") || "";
 
   // Learning selection
-  const [selectedLearningMethod, setSelectedLearningMethod] = useState<LearningMethodId>(modeFromUrl || "flashcard");
+  const [selectedLearningMethod, setSelectedLearningMethod] = useState<LearningMethodId>(modeFromUrl || "vocab");
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
   const [selectedCourseTitle, setSelectedCourseTitle] = useState<string>("");
   const [selectedTopicId, setSelectedTopicId] = useState<string>("");

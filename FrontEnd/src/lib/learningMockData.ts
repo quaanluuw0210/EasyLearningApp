@@ -12,6 +12,12 @@ export type LearningMethod = {
 
 export const learningMethods: LearningMethod[] = [
   {
+    id: "vocab",
+    label: "Từ vựng",
+    description: "Xem và học toàn bộ từ trong chủ đề",
+    icon: BookOpen,
+  },
+  {
     id: "flashcard",
     label: "Flashcard",
     description: "Học từ vựng bằng Flashcard",
@@ -22,12 +28,6 @@ export const learningMethods: LearningMethod[] = [
     label: "Học ngắt quãng",
     description: "Ôn lại những từ bạn sắp quên",
     icon: Brain,
-  },
-  {
-    id: "vocab",
-    label: "Từ vựng",
-    description: "Xem và học toàn bộ từ trong chủ đề",
-    icon: BookOpen,
   },
 ];
 

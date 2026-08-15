@@ -49,9 +49,6 @@ export default function SidebarNav({
       try {
         setIsLoadingCourses(true);
         setFetchError(null);
-        // const data = await learningApi.getCourses();
-        // if (!active) return;
-        // setCourses(data);
       } catch (err) {
         console.error(err);
         if (!active) return;
@@ -110,7 +107,7 @@ export default function SidebarNav({
   return (
     <>
       <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden p-5">
-        {user && (
+        {
           <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200/70 bg-white/55 shadow-sm">
             {/* 2. Danh sách Chủ đề (Scroll Area) */}
             <div className="app-sidebar-scrollbar min-h-0 flex-1 space-y-4 overflow-y-scroll px-4 py-4">
@@ -175,7 +172,7 @@ export default function SidebarNav({
             </div>
 
           </div>
-        )}
+        }
       </div>
       <Toast
         show={toast.show}
