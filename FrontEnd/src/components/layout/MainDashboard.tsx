@@ -4,40 +4,39 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams, useParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { CalendarCheck, Menu, X, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { CalendarCheck, ArrowLeft, X, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from "lucide-react";
 import SidebarNav from "./SidebarNav";
 import ChatInterface from "@/components/sections/ChatInterface";
 import ProfileSettings from "@/components/sections/ProfileSettings";
 import ItineraryPanel from "./ItineraryPanel";
 import { Restaurant, buildRestaurants } from "@/lib/utils";
-import { itineraryApi } from "@/lib/api";
 import type { LearningMethodId } from "@/lib/learningMockData";
 
-export type DashboardState = {
-  location: string;
-  placeId: string;
-  budget: string;
-  filters: string[];
-  selectedRestaurants: Restaurant[];
-};
+// export type DashboardState = {
+//   location: string;
+//   placeId: string;
+//   budget: string;
+//   filters: string[];
+//   selectedRestaurants: Restaurant[];
+// };
 
-type ChatSession = {
-  id: string;
-  title: string;
-  updated_at: string;
-};
+// type ChatSession = {
+//   id: string;
+//   title: string;
+//   updated_at: string;
+// };
 
-type ChatMessage = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp?: string;
-  isCompact?: boolean;
-  restaurants?: Restaurant[];
-  metadata?: {
-    restaurants?: Restaurant[];
-  };
-};
+// type ChatMessage = {
+//   id: string;
+//   role: "user" | "assistant";
+//   content: string;
+//   timestamp?: string;
+//   isCompact?: boolean;
+//   restaurants?: Restaurant[];
+//   metadata?: {
+//     restaurants?: Restaurant[];
+//   };
+// };
 
 type MainDashboardProps = {
   courseIdFromUrl?: string;
@@ -78,25 +77,14 @@ export default function MainDashboard({ courseIdFromUrl, topicIdFromUrl, modeFro
   const [selectedCourseTitle, setSelectedCourseTitle] = useState<string>("");
   const [selectedTopicId, setSelectedTopicId] = useState<string>("");
   const [selectedTopicTitle, setSelectedTopicTitle] = useState<string>("");
-
-  // Dashboard & itinerary
-  const [dashboardState, setDashboardState] = useState<DashboardState>({
-    location: "",
-    placeId: "",
-    budget: "",
-    filters: [],
-    selectedRestaurants: [],
-  });
   const [selectedRestaurantId, setSelectedRestaurantId] = useState<string | null>(null);
   const [itineraryTab, setItineraryTab] = useState<"itinerary" | "detail">("itinerary");
   const [showBoardingPass, setShowBoardingPass] = useState(false);
   const [currentItinerary, setCurrentItinerary] = useState<any[]>([]);
 
   // Chat
-  const isInitializingChat = useRef(false);
+
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
-  const [chatHistory, setChatHistory] = useState<ChatSession[]>([]);
-  const [currentMessages, setCurrentMessages] = useState<ChatMessage[]>([]);
 
   // Mobile itinerary bubble
   const [itineraryBubblePosition, setItineraryBubblePosition] = useState(() => {
@@ -123,52 +111,6 @@ export default function MainDashboard({ courseIdFromUrl, topicIdFromUrl, modeFro
       setSelectedLearningMethod(modeFromUrl);
     }
   }, [courseIdFromUrl, courseIdFromPath, courseIdFromQuery, topicIdFromUrl, topicIdFromPath, topicIdFromQuery, modeFromUrl, selectedCourseId, selectedTopicId]);
-
-  useEffect(() => {
-    if (user?.uid) fetchItinerary();
-  }, [user?.uid]);
-
-  useEffect(() => {
-    const initChat = async () => {
-      if (user?.uid) {
-        if (isInitializingChat.current) return;
-        isInitializingChat.current = true;
-
-        await fetchChatHistory();
-        const sessionKey = `bmi_chat_init_${user.uid}`;
-        const isSessionInitialized = sessionStorage.getItem(sessionKey);
-
-        if (urlChatId) {
-          setCurrentChatId(urlChatId);
-          await fetchChatMessages(urlChatId);
-          sessionStorage.setItem(sessionKey, "true");
-        } else if (!isSessionInitialized) {
-          await handleNewChat();
-          sessionStorage.setItem(sessionKey, "true");
-        } else if (!currentChatId) {
-          const history = await fetchChatHistory();
-          if (history.length > 0) {
-            const latestChat = history[0];
-            setCurrentChatId(latestChat.id);
-            fetchChatMessages(latestChat.id);
-          }
-        }
-
-        isInitializingChat.current = false;
-      } else {
-        setChatHistory([]);
-        setCurrentChatId(null);
-        setCurrentMessages([]);
-        isInitializingChat.current = false;
-        if (typeof window !== "undefined") {
-          Object.keys(sessionStorage).forEach((key) => {
-            if (key.startsWith("bmi_chat_init_")) sessionStorage.removeItem(key);
-          });
-        }
-      }
-    };
-    initChat();
-  }, [user?.uid]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -200,191 +142,174 @@ export default function MainDashboard({ courseIdFromUrl, topicIdFromUrl, modeFro
     return () => window.removeEventListener("resize", handleResize);
   }, [isMobile]);
 
-  // ────────── Itinerary ──────────
+  // // ────────── Itinerary ──────────
 
-  const fetchItinerary = async () => {
-    if (!user?.uid) return;
-    try {
-      const data = await itineraryApi.get(user.uid);
-      if (data.status === "success") {
-        setCurrentItinerary(buildRestaurants(data.itinerary));
-      }
-    } catch (err) {
-      console.error("Error fetching itinerary:", err);
-    }
-  };
+  // const fetchItinerary = async () => {
+  //   if (!user?.uid) return;
+  //   try {
+  //     const data = await itineraryApi.get(user.uid);
+  //     if (data.status === "success") {
+  //       setCurrentItinerary(buildRestaurants(data.itinerary));
+  //     }
+  //   } catch (err) {
+  //     console.error("Error fetching itinerary:", err);
+  //   }
+  // };
 
-  const handleSelectMeal = async (meal: string, restaurant: Restaurant) => {
-    if (!user?.uid) { router.push("/login"); return; }
-    try {
-      const data = await itineraryApi.select(user.uid, meal, restaurant);
-      if (data.status === "success") await fetchItinerary();
-    } catch (err) {
-      console.error("Error selecting meal:", err);
-    }
-  };
+  // const handleSelectMeal = async (meal: string, restaurant: Restaurant) => {
+  //   if (!user?.uid) { router.push("/login"); return; }
+  //   try {
+  //     const data = await itineraryApi.select(user.uid, meal, restaurant);
+  //     if (data.status === "success") await fetchItinerary();
+  //   } catch (err) {
+  //     console.error("Error selecting meal:", err);
+  //   }
+  // };
 
-  const handleDeleteMeal = async (itemId: string) => {
-    if (!user?.uid) return;
-    try {
-      const data = await itineraryApi.deleteMeal(user.uid, itemId);
-      if (data.status === "success") await fetchItinerary();
-    } catch (err) {
-      console.error("Error deleting meal:", err);
-    }
-  };
+  // const handleDeleteMeal = async (itemId: string) => {
+  //   if (!user?.uid) return;
+  //   try {
+  //     const data = await itineraryApi.deleteMeal(user.uid, itemId);
+  //     if (data.status === "success") await fetchItinerary();
+  //   } catch (err) {
+  //     console.error("Error deleting meal:", err);
+  //   }
+  // };
 
-  const handleResetItinerary = async () => {
-    if (!user?.uid) return;
-    try {
-      const data = await itineraryApi.reset(user.uid);
-      if (data.status === "success") await fetchItinerary();
-    } catch (err) {
-      console.error("Error resetting itinerary:", err);
-    }
-  };
+  // const handleResetItinerary = async () => {
+  //   if (!user?.uid) return;
+  //   try {
+  //     const data = await itineraryApi.reset(user.uid);
+  //     if (data.status === "success") await fetchItinerary();
+  //   } catch (err) {
+  //     console.error("Error resetting itinerary:", err);
+  //   }
+  // };
 
-  const handleReorder = async (orderedItems: { id: string }[]) => {
-    if (!user?.uid) return;
-    try {
-      const mealMap = new Map(currentItinerary.map((item) => [item.id, item]));
-      const newItinerary = orderedItems
-        .map((item) => mealMap.get(item.id))
-        .filter((item): item is NonNullable<typeof item> => Boolean(item));
-      setCurrentItinerary(newItinerary);
-      const data = await itineraryApi.reorder(user.uid, orderedItems);
-      if (data.status !== "success") await fetchItinerary();
-    } catch (err) {
-      console.error("Error reordering itinerary:", err);
-      await fetchItinerary();
-    }
-  };
+  // const handleReorder = async (orderedItems: { id: string }[]) => {
+  //   if (!user?.uid) return;
+  //   try {
+  //     const mealMap = new Map(currentItinerary.map((item) => [item.id, item]));
+  //     const newItinerary = orderedItems
+  //       .map((item) => mealMap.get(item.id))
+  //       .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  //     setCurrentItinerary(newItinerary);
+  //     const data = await itineraryApi.reorder(user.uid, orderedItems);
+  //     if (data.status !== "success") await fetchItinerary();
+  //   } catch (err) {
+  //     console.error("Error reordering itinerary:", err);
+  //     await fetchItinerary();
+  //   }
+  // };
 
-  // ────────── Chat ──────────
+  
 
-  const fetchChatHistory = async () => {
-    if (!user?.uid) return [];
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/user/chat/history/${user.uid}`);
-      const data = await response.json();
-      if (data.status === "success") {
-        setChatHistory(data.history);
-        return data.history;
-      }
-    } catch (err) {
-      console.error("Error fetching chat history:", err);
-    }
-    return [];
-  };
+  // const fetchChatMessages = async (chatId: string) => {
+  //   if (!user?.uid) return;
+  //   try {
+  //     const response = await fetch(`${API_BASE_URL}/api/user/chat/${user.uid}/${chatId}/messages`);
+  //     const data = await response.json();
+  //     if (data.status === "success") {
+  //       const processedMessages = data.messages.map((msg: any) => {
+  //         if (msg.role === "assistant" && msg.metadata) {
+  //           const rawItems = msg.metadata.restaurants || msg.metadata.result || [];
+  //           if (rawItems.length > 0) return { ...msg, restaurants: buildRestaurants(rawItems) };
+  //         }
+  //         return msg;
+  //       });
+  //       setCurrentMessages(processedMessages);
 
-  const fetchChatMessages = async (chatId: string) => {
-    if (!user?.uid) return;
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/user/chat/${user.uid}/${chatId}/messages`);
-      const data = await response.json();
-      if (data.status === "success") {
-        const processedMessages = data.messages.map((msg: any) => {
-          if (msg.role === "assistant" && msg.metadata) {
-            const rawItems = msg.metadata.restaurants || msg.metadata.result || [];
-            if (rawItems.length > 0) return { ...msg, restaurants: buildRestaurants(rawItems) };
-          }
-          return msg;
-        });
-        setCurrentMessages(processedMessages);
+  //       const assistantMsgsWithResults = processedMessages
+  //         .filter((m: any) => m.role === "assistant" && m.restaurants)
+  //         .reverse();
+  //       setDashboardState((prev) => ({
+  //         ...prev,
+  //         selectedRestaurants: assistantMsgsWithResults.length > 0 ? assistantMsgsWithResults[0].restaurants : [],
+  //       }));
+  //     }
+  //   } catch (err) {
+  //     console.error("Error fetching chat messages:", err);
+  //   }
+  // };
 
-        const assistantMsgsWithResults = processedMessages
-          .filter((m: any) => m.role === "assistant" && m.restaurants)
-          .reverse();
-        setDashboardState((prev) => ({
-          ...prev,
-          selectedRestaurants: assistantMsgsWithResults.length > 0 ? assistantMsgsWithResults[0].restaurants : [],
-        }));
-      }
-    } catch (err) {
-      console.error("Error fetching chat messages:", err);
-    }
-  };
+  // const startLocalNewChat = () => {
+  //   setCurrentChatId(null);
+  //   setCurrentMessages([]);
+  //   setDashboardState((prev) => ({ ...prev, budget: "", filters: [], selectedRestaurants: [] }));
+  //   handleResetItinerary();
+  // };
 
-  const startLocalNewChat = () => {
-    setCurrentChatId(null);
-    setCurrentMessages([]);
-    setDashboardState((prev) => ({ ...prev, budget: "", filters: [], selectedRestaurants: [] }));
-    handleResetItinerary();
-  };
+  // const handleNewChat = async () => {
+  //   if (!user?.uid) { router.push("/login"); return null; }
+  //   try {
+  //     await handleResetItinerary();
+  //     const response = await fetch(`${API_BASE_URL}/api/user/chat/new/${user.uid}`, { method: "POST" });
+  //     const data = await response.json();
+  //     if (data.status === "success") {
+  //       setCurrentChatId(data.chat_id);
+  //       await fetchChatMessages(data.chat_id);
+  //       return data.chat_id;
+  //     }
+  //   } catch (err) {
+  //     console.error("Error creating new chat:", err);
+  //   }
+  //   return null;
+  // };
 
-  const handleNewChat = async () => {
-    if (!user?.uid) { router.push("/login"); return null; }
-    try {
-      await handleResetItinerary();
-      const response = await fetch(`${API_BASE_URL}/api/user/chat/new/${user.uid}`, { method: "POST" });
-      const data = await response.json();
-      if (data.status === "success") {
-        setCurrentChatId(data.chat_id);
-        fetchChatHistory();
-        await fetchChatMessages(data.chat_id);
-        return data.chat_id;
-      }
-    } catch (err) {
-      console.error("Error creating new chat:", err);
-    }
-    return null;
-  };
+  // const handleChatSelect = (chatId: string) => {
+  //   setCurrentChatId(chatId);
+  //   setCurrentMessages([]);
+  //   fetchChatMessages(chatId);
+  // };
 
-  const handleChatSelect = (chatId: string) => {
-    setCurrentChatId(chatId);
-    setCurrentMessages([]);
-    fetchChatMessages(chatId);
-  };
+  // const handleDeleteChat = async (chatId: string) => {
+  //   if (!user?.uid) return;
+  //   try {
+  //     const response = await fetch(`${API_BASE_URL}/api/user/chat/${user.uid}/${chatId}`, { method: "DELETE" });
+  //     const data = await response.json();
+  //     if (data.status === "success") {
+  //       if (currentChatId === chatId) {
+  //         setCurrentChatId(null);
+  //         setCurrentMessages([]);
+  //         setDashboardState((prev) => ({ ...prev, selectedRestaurants: [] }));
+  //       }
+  //     }
+  //   } catch (err) {
+  //     console.error("Error deleting chat:", err);
+  //   }
+  // };
 
-  const handleDeleteChat = async (chatId: string) => {
-    if (!user?.uid) return;
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/user/chat/${user.uid}/${chatId}`, { method: "DELETE" });
-      const data = await response.json();
-      if (data.status === "success") {
-        fetchChatHistory();
-        if (currentChatId === chatId) {
-          setCurrentChatId(null);
-          setCurrentMessages([]);
-          setDashboardState((prev) => ({ ...prev, selectedRestaurants: [] }));
-        }
-      }
-    } catch (err) {
-      console.error("Error deleting chat:", err);
-    }
-  };
+  // // ────────── UI helpers ──────────
 
-  // ────────── UI helpers ──────────
+  // const budgetDisplay = useMemo(() => {
+  //   const amount = Number(dashboardState.budget);
+  //   if (!amount || Number.isNaN(amount)) return "Chưa nhập";
+  //   return `${amount.toLocaleString("vi-VN")} VNĐ`;
+  // }, [dashboardState.budget]);
 
-  const budgetDisplay = useMemo(() => {
-    const amount = Number(dashboardState.budget);
-    if (!amount || Number.isNaN(amount)) return "Chưa nhập";
-    return `${amount.toLocaleString("vi-VN")} VNĐ`;
-  }, [dashboardState.budget]);
+  // const mealTypes = ["Cafe", "Bistro", "Fine Dining", "Street Food"];
+  // const getTravelTime = () => `${Math.floor(10 + Math.random() * 11)}p`;
 
-  const mealTypes = ["Cafe", "Bistro", "Fine Dining", "Street Food"];
-  const getTravelTime = () => `${Math.floor(10 + Math.random() * 11)}p`;
+  // const mealStops = useMemo(
+  //   () =>
+  //     dashboardState.selectedRestaurants.slice(0, 3).map((restaurant, index) => ({
+  //       label: `STOP ${String(index + 1).padStart(2, "0")}`,
+  //       name: restaurant.name || "Chưa có dữ liệu",
+  //       time: getTravelTime(),
+  //       price:
+  //         typeof restaurant.price === "number"
+  //           ? `${restaurant.price.toLocaleString("vi-VN")}đ`
+  //           : restaurant.price || "Chưa cập nhật",
+  //       type: restaurant.meals?.[0]?.trim() || mealTypes[index] || "Cafe",
+  //       rating: restaurant.rating ?? 0,
+  //     })),
+  //   [dashboardState.selectedRestaurants]
+  // );
 
-  const mealStops = useMemo(
-    () =>
-      dashboardState.selectedRestaurants.slice(0, 3).map((restaurant, index) => ({
-        label: `STOP ${String(index + 1).padStart(2, "0")}`,
-        name: restaurant.name || "Chưa có dữ liệu",
-        time: getTravelTime(),
-        price:
-          typeof restaurant.price === "number"
-            ? `${restaurant.price.toLocaleString("vi-VN")}đ`
-            : restaurant.price || "Chưa cập nhật",
-        type: restaurant.meals?.[0]?.trim() || mealTypes[index] || "Cafe",
-        rating: restaurant.rating ?? 0,
-      })),
-    [dashboardState.selectedRestaurants]
-  );
-
-  const selectedRestaurant = useMemo(
-    () => dashboardState.selectedRestaurants.find((r) => r.id === selectedRestaurantId) || null,
-    [dashboardState.selectedRestaurants, selectedRestaurantId]
-  );
+  // const selectedRestaurant = useMemo(
+  //   () => dashboardState.selectedRestaurants.find((r) => r.id === selectedRestaurantId) || null,
+  //   [dashboardState.selectedRestaurants, selectedRestaurantId]
+  // );
 
   const isRightPanelExpanded = (itineraryTab === "detail" && !!selectedRestaurantId) || showBoardingPass;
 
@@ -412,22 +337,22 @@ export default function MainDashboard({ courseIdFromUrl, topicIdFromUrl, modeFro
     setRestaurantModalOpen(false);
   };
 
-  const handleStateChange = (newState: DashboardState) => {
-    if (newState.location !== dashboardState.location) {
-      localStorage.setItem("bmi_user_location", newState.location);
-      localStorage.setItem("bmi_user_place_id", newState.placeId);
-    }
-    setDashboardState(newState);
-  };
+  // const handleStateChange = (newState: DashboardState) => {
+  //   if (newState.location !== dashboardState.location) {
+  //     localStorage.setItem("bmi_user_location", newState.location);
+  //     localStorage.setItem("bmi_user_place_id", newState.placeId);
+  //   }
+  //   setDashboardState(newState);
+  // };
 
-  const handleUserLocationChange = (nextLocation: { location: string; placeId: string }) => {
-    setDashboardState((prev) => {
-      const nextState = { ...prev, location: nextLocation.location, placeId: nextLocation.placeId };
-      localStorage.setItem("bmi_user_location", nextState.location);
-      localStorage.setItem("bmi_user_place_id", nextState.placeId);
-      return nextState;
-    });
-  };
+  // const handleUserLocationChange = (nextLocation: { location: string; placeId: string }) => {
+  //   setDashboardState((prev) => {
+  //     const nextState = { ...prev, location: nextLocation.location, placeId: nextLocation.placeId };
+  //     localStorage.setItem("bmi_user_location", nextState.location);
+  //     localStorage.setItem("bmi_user_place_id", nextState.placeId);
+  //     return nextState;
+  //   });
+  // };
 
   const handleProfileOpen = () => {
     if (!user?.uid) { router.push("/login"); return; }
@@ -495,20 +420,13 @@ export default function MainDashboard({ courseIdFromUrl, topicIdFromUrl, modeFro
   // ────────── Render ──────────
 
   const itineraryPanelProps = {
-    location: dashboardState.location,
-    budget: budgetDisplay,
-    mealStops,
-    restaurants: dashboardState.selectedRestaurants,
+    
     selectedRestaurantId,
     currentTab: itineraryTab,
     onSelectRestaurant: handleRestaurantSelect,
     onTabChange: handleItineraryTabChange,
     onCloseDetail: handleCloseDetail,
     currentItinerary,
-    onDeleteMeal: handleDeleteMeal,
-    onResetItinerary: handleResetItinerary,
-    onReorder: handleReorder,
-    showBoardingPass,
     onShowBoardingPassChange: setShowBoardingPass,
     selectedLearningMethod,
     onSelectLearningMethod: setSelectedLearningMethod,
@@ -520,26 +438,29 @@ export default function MainDashboard({ courseIdFromUrl, topicIdFromUrl, modeFro
       <nav className="relative flex items-center justify-between border-b border-slate-200/60 bg-slate-50/70 px-4 py-3 backdrop-blur sm:px-6">
 
         {/* Left: menu toggle + back link */}
-        <div className="z-10 flex items-center gap-2">
-          <Link
-            href="/"
-            className="hidden items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-slate-900 md:flex"
-          >
-            Quay lại
-          </Link>
+          <div className="z-10 flex items-center gap-2">
+            {/* Nút Quay lại: Hiện icon trên mobile, đầy đủ chữ trên desktop */}
+            <Link
+              href="/"
+              className="flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-slate-900 sm:px-3"
+              title="Quay lại"
+            >
+              <ArrowLeft size={18} />
+              <span className="hidden sm:inline">Quay lại</span>
+            </Link>
 
-          {/* Toggle left sidebar */}
-          <button
-            type="button"
-            onClick={handleSidebarToggle}
-            title={sidebarOpen ? "Ẩn cột trái" : "Hiện cột trái"}
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-100"
-          >
-            {(isMobile ? mobileSidebarOpen : sidebarOpen)
-              ? <PanelLeftClose size={18} />
-              : <PanelLeftOpen size={18} />}
-          </button>
-        </div>
+            {/* Toggle left sidebar */}
+            <button
+              type="button"
+              onClick={handleSidebarToggle}
+              title={sidebarOpen ? "Ẩn cột trái" : "Hiện cột trái"}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-100"
+            >
+              {(isMobile ? mobileSidebarOpen : sidebarOpen)
+                ? <PanelLeftClose size={18} />
+                : <PanelLeftOpen size={18} />}
+            </button>
+          </div>
 
         {/* Center: Logo */}
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
@@ -619,15 +540,10 @@ export default function MainDashboard({ courseIdFromUrl, topicIdFromUrl, modeFro
           )}
           <div className="min-h-0 flex-1">
             <SidebarNav
-              state={dashboardState}
-              onStateChange={handleStateChange}
+        
               onOpenProfileSettings={handleProfileOpen}
               onTabChange={handleItineraryTabChange}
-              chatHistory={chatHistory}
               currentChatId={currentChatId}
-              onNewChat={startLocalNewChat}
-              onChatSelect={handleChatSelect}
-              onDeleteChat={handleDeleteChat}
               selectedCourseId={selectedCourseId}
               selectedTopicId={selectedTopicId}
               onCourseSelect={(courseId, courseTitle) => {
@@ -647,20 +563,11 @@ export default function MainDashboard({ courseIdFromUrl, topicIdFromUrl, modeFro
         {/* Main content area */}
         <main className="flex flex-1 min-h-0 flex-col overflow-hidden bg-slate-50 /70">
           <ChatInterface
-            placeId={dashboardState.placeId}
+    
             chatId={currentChatId}
-            messages={currentMessages}
-            onMessagesChange={setCurrentMessages}
-            onRestaurantsSelect={(restaurants) =>
-              setDashboardState((prev) => ({ ...prev, selectedRestaurants: restaurants }))
-            }
+
             onRestaurantSelect={handleRestaurantSelect}
-            onRefreshHistory={fetchChatHistory}
-            onAutoCreateChat={handleNewChat}
             currentItinerary={currentItinerary}
-            onSelectMeal={handleSelectMeal}
-            fetchItinerary={fetchItinerary}
-            onLocationResolved={handleUserLocationChange}
             selectedLearningMethod={selectedLearningMethod}
             selectedCourseId={selectedCourseId}
             selectedCourseTitle={selectedCourseTitle}
@@ -725,7 +632,7 @@ export default function MainDashboard({ courseIdFromUrl, topicIdFromUrl, modeFro
       )}
 
       {/* ── Mobile: restaurant detail modal ── */}
-      {restaurantModalOpen && selectedRestaurant && (
+      {restaurantModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm md:hidden">
           <div className="relative w-full max-w-md overflow-hidden rounded-[28px] bg-white shadow-2xl">
             <button

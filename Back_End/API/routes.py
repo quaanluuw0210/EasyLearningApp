@@ -6,6 +6,7 @@ import os
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
 from Back_End.Core.auth_handler import get_db
+from Back_End.Core.flashcard_service import FlashcardService
 from Back_End.Core.vocab_repository import LocalVocabRepository
 
 # Trả về giờ UTC có chứa thông tin múi giờ UTC rõ ràng (timezone-aware)
@@ -28,7 +29,7 @@ class SRSProgress(BaseModel):
     interval: int = Field(..., description="Khoảng cách ôn tập (ngày)")
     nextReviewDate: datetime = Field(..., description="Ngày xem lại kế tiếp ở UTC")
     lastReviewedAt: datetime = Field(..., description="Thời điểm cập nhật lần cuối ở UTC")
-    quality: int = Field(..., ge=0, le=5, description="Đánh giá lần học gần nhất")
+    quality: int = Field(..., ge=0, le=4, description="Đánh giá lần học gần nhất")
 
 
 class VocabularyItem(BaseModel):
@@ -71,7 +72,7 @@ class SRSReviewRequest(BaseModel):
     course_id: str
     topic_id: str
     vocab_id: str
-    quality: int = Field(..., ge=0, le=5, description="Đánh giá mức độ nhớ từ 0 đến 5")
+    quality: int = Field(..., ge=1, le=4, description="Đánh giá mức độ nhớ từ 1 đến 4")
 
 
 class TopicFlashcardProgressRequest(BaseModel):
@@ -85,13 +86,30 @@ class TopicFlashcardProgressResponse(BaseModel):
     flashcardCurrentIndex: int
     flashcardViewedCards: List[int]
     flashcardUpdatedAt: Optional[datetime] = None
+    srs_items: dict[str, dict] = Field(default_factory=dict)
+
+
+class FlashcardVocabularyResponse(BaseModel):
+    vocabId: str
+    word: str
+    partOfSpeech: Optional[str] = None
+    phonetic: Optional[str] = None
+    meaningVi: Optional[str] = None
+    exampleSentence: Optional[str] = None
+    srs: Optional[dict] = None
+
+
+class FlashcardPageResponse(BaseModel):
+    vocabularies: List[FlashcardVocabularyResponse]
+    flashcardCurrentIndex: int = 0
+    flashcardViewedCards: List[int] = Field(default_factory=list)
 
 
 class GuestSyncItem(BaseModel):
     course_id: str
     topic_id: str
     vocab_id: str
-    quality: int = Field(..., ge=0, le=5)
+    quality: int = Field(..., ge=1, le=4)
     reviewed_at: Optional[datetime] = None
 
 
@@ -199,80 +217,172 @@ def _build_srs_progress(data: dict) -> SRSProgress:
         quality=int(data.get("quality", 0)),
     )
 
-def _calculate_sm2(quality: int, ef: float, repetitions: int, interval: int) -> tuple[float, int, int, datetime]:
-    # 1. Cập nhật Ease Factor (EF)
-    ef_prime = ef + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02))
-    ef_prime = max(1.3, ef_prime)
+def _calculate_sm2(
+    quality: int,
+    ef: float,
+    repetitions: int,
+    interval: int,
+) -> tuple[float, int, int, datetime]:
 
     now = get_utc_now()
 
-    # 2. Xử lý các bước MỚI HỌC / HỌC LẠI (Learning Steps - Tính theo PHÚT)
-    # Mapping nút bấm: quality 1=Again (<1m), 2=Hard (<6m), 3=Good (<10m)
-    if quality < 3: # Again hoặc Hard (Thất bại / Khó)
+    # =====================================================
+    # 1. Cập nhật Ease Factor
+    # =====================================================
+
+    ef_prime = ef + (
+        0.1
+        - (5 - quality)
+        * (0.08 + (5 - quality) * 0.02)
+    )
+
+    ef_prime = max(1.3, ef_prime)
+
+    # =====================================================
+    # 2. AGAIN → 1 phút
+    # =====================================================
+
+    if quality == 1:
         repetitions = 0
-        interval = 0  # 0 ngày (đang trong giai đoạn học theo phút)
-        
-        # Quality 1 (Again) -> 1 phút, Quality 2 (Hard) -> 6 phút
-        minutes_add = 1 if quality == 1 else 6 
-        next_review_date = now + timedelta(minutes=minutes_add)
-
-    elif repetitions == 0 and quality == 3: # Good lần đầu tiên -> Bước học 10 phút
         interval = 0
-        minutes_add = 10
-        next_review_date = now + timedelta(minutes=minutes_add)
-        # Giữ repetitions = 0 để lần sau bấm Good tiếp mới chính thức Graduated sang 1 ngày
 
-    # 3. Xử lý khi từ vựng TỐT NGHIỆP (Graduated - Tính theo NGÀY)
-    else:
-        if repetitions == 0:  # Chọn Easy ngay từ đầu (quality >= 4)
-            interval = 5      # 5 ngày theo nhãn Easy (5d)
+        next_review_date = now + timedelta(minutes=1)
+
+        return (
+            ef_prime,
+            repetitions,
+            interval,
+            next_review_date,
+        )
+
+    # =====================================================
+    # 3. HARD → 6 phút
+    # =====================================================
+
+    if quality == 2:
+        repetitions = 0
+        interval = 0
+
+        next_review_date = now + timedelta(minutes=6)
+
+        return (
+            ef_prime,
+            repetitions,
+            interval,
+            next_review_date,
+        )
+
+    # =====================================================
+    # 4. GOOD → LUÔN LUÔN 10 PHÚT
+    # =====================================================
+
+    if quality == 3:
+        repetitions += 1
+        interval = 0
+
+        next_review_date = now + timedelta(minutes=10)
+
+        return (
+            ef_prime,
+            repetitions,
+            interval,
+            next_review_date,
+        )
+
+    # =====================================================
+    # 5. EASY
+    # =====================================================
+
+    if quality == 4:
+
+        # Easy lần đầu → 5 ngày
+        if repetitions == 0:
             repetitions = 1
-        elif repetitions == 1: # Đã qua bước 10m, bấm Good tiếp -> Nhảy lên 1 ngày
-            interval = 1
-            repetitions = 2
-        elif repetitions == 2: # Nhảy lên 6 ngày
-            interval = 6
-            repetitions = 3
-        else:                  # Tăng trưởng theo hệ số EF
-            interval = max(1, round(interval * ef_prime))
+            interval = 5
+
+        # Easy sau khi đã Good nhiều lần
+        else:
+            interval = max(
+                1,
+                round(
+                    max(interval, 1) * ef_prime
+                )
+            )
+
             repetitions += 1
-            
+
         next_review_date = now + timedelta(days=interval)
 
-    return ef_prime, repetitions, interval, next_review_date
+        return (
+            ef_prime,
+            repetitions,
+            interval,
+            next_review_date,
+        )
+
+    # Fallback
+    return (
+        ef_prime,
+        repetitions,
+        interval,
+        now,
+    )
+
+def _get_course_progress_document_ref(user_id: str, course_id: str):
+    return db.collection("users").document(user_id).collection("course_progress").document(course_id)
 
 
-def _safe_document_path(*parts: str):
-    return "/".join(str(part).strip().strip("/") for part in parts)
+def _get_topic_document_ref(user_id: str, course_id: str, topic_id: str):
+    return _get_course_progress_document_ref(user_id, course_id).collection("topic_progress").document(topic_id)
+
+
+def _mark_course_progress_updated(user_id: str, course_id: str, updated_at: datetime):
+    if db is None:
+        return
+
+    course_ref = _get_course_progress_document_ref(user_id, course_id)
+
+    def write_doc():
+        course_ref.set({"updatedAt": updated_at}, merge=True)
+
+    asyncio.to_thread(write_doc)
+
+
+async def _get_topic_progress(user_id: str, course_id: str, topic_id: str) -> dict:
+    if db is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Firestore client is not initialized.")
+
+    topic_ref = _get_topic_document_ref(user_id, course_id, topic_id)
+    doc = await asyncio.to_thread(topic_ref.get)
+    return doc.to_dict() if doc.exists else {}
 
 
 async def _get_user_srs_map(user_id: str, course_id: str, topic_id: str) -> dict:
+    topic_data = await _get_topic_progress(user_id, course_id, topic_id)
+    srs_items = topic_data.get("srs_items", {})
+    return srs_items if isinstance(srs_items, dict) else {}
+
+
+async def _save_srs_item(
+    user_id: str,
+    course_id: str,
+    topic_id: str,
+    vocab_id: str,
+    progress: dict,
+    last_studied_at: datetime,
+):
     if db is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Firestore client is not initialized.")
 
-    topic_ref = db.collection("users").document(user_id)
-    topic_ref = topic_ref.collection("course_progress").document(course_id)
-    topic_ref = topic_ref.collection("topic_progress").document(topic_id)
-    srs_collection = topic_ref.collection("srs_items")
-
-    def stream_items():
-        return list(srs_collection.stream())
-
-    docs = await asyncio.to_thread(stream_items)
-    return {doc.id: doc.to_dict() for doc in docs}
-
-
-async def _save_srs_item(user_id: str, course_id: str, topic_id: str, vocab_id: str, progress: dict):
-    if db is None:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Firestore client is not initialized.")
-
-    item_ref = db.collection("users").document(user_id)
-    item_ref = item_ref.collection("course_progress").document(course_id)
-    item_ref = item_ref.collection("topic_progress").document(topic_id)
-    item_ref = item_ref.collection("srs_items").document(vocab_id)
+    topic_ref = _get_topic_document_ref(user_id, course_id, topic_id)
+    course_ref = _get_course_progress_document_ref(user_id, course_id)
 
     def write_item():
-        item_ref.set(progress, merge=True)
+        topic_ref.set({
+            f"srs_items.{vocab_id}": progress,
+            "lastStudiedAt": last_studied_at,
+        }, merge=True)
+        course_ref.set({"updatedAt": last_studied_at}, merge=True)
 
     await asyncio.to_thread(write_item)
 
@@ -287,28 +397,26 @@ async def _save_srs_topic_batch(
     if db is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Firestore client is not initialized.")
 
-    topic_ref = db.collection("users").document(user_id)
-    topic_ref = topic_ref.collection("course_progress").document(course_id)
-    topic_ref = topic_ref.collection("topic_progress").document(topic_id)
+    topic_ref = _get_topic_document_ref(user_id, course_id, topic_id)
+    course_ref = _get_course_progress_document_ref(user_id, course_id)
 
-    def commit_batch():
-        batch = db.batch()
-        for vocab_id, progress in item_updates:
-            item_ref = topic_ref.collection("srs_items").document(vocab_id)
-            batch.set(item_ref, progress, merge=True)
-        batch.set(topic_ref, {"lastStudiedAt": last_studied_at}, merge=True)
-        batch.commit()
+    def update_topic():
+        updates = {
+            f"srs_items.{vocab_id}": progress
+            for vocab_id, progress in item_updates
+        }
+        updates["lastStudiedAt"] = last_studied_at
+        topic_ref.set(updates, merge=True)
+        course_ref.set({"updatedAt": last_studied_at}, merge=True)
 
-    await asyncio.to_thread(commit_batch)
+    await asyncio.to_thread(update_topic)
 
 
 async def _update_topic_last_studied(user_id: str, course_id: str, topic_id: str, last_studied_at: datetime):
     if db is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Firestore client is not initialized.")
 
-    topic_doc_ref = db.collection("users").document(user_id)
-    topic_doc_ref = topic_doc_ref.collection("course_progress").document(course_id)
-    topic_doc_ref = topic_doc_ref.collection("topic_progress").document(topic_id)
+    topic_doc_ref = _get_topic_document_ref(user_id, course_id, topic_id)
 
     def update_doc():
         topic_doc_ref.set({"lastStudiedAt": last_studied_at}, merge=True)
@@ -320,17 +428,7 @@ async def _get_topic_flashcard_progress(user_id: str, course_id: str, topic_id: 
     if db is None:
         return {}
 
-    topic_doc_ref = db.collection("users").document(user_id)
-    topic_doc_ref = topic_doc_ref.collection("course_progress").document(course_id)
-    topic_doc_ref = topic_doc_ref.collection("topic_progress").document(topic_id)
-
-    def read_doc():
-        return topic_doc_ref.get()
-
-    doc = await asyncio.to_thread(read_doc)
-    if doc.exists:
-        return doc.to_dict() or {}
-    return {}
+    return await _get_topic_progress(user_id, course_id, topic_id)
 
 
 async def _save_topic_flashcard_progress(
@@ -344,9 +442,8 @@ async def _save_topic_flashcard_progress(
     if db is None:
         return
 
-    topic_doc_ref = db.collection("users").document(user_id)
-    topic_doc_ref = topic_doc_ref.collection("course_progress").document(course_id)
-    topic_doc_ref = topic_doc_ref.collection("topic_progress").document(topic_id)
+    topic_doc_ref = _get_topic_document_ref(user_id, course_id, topic_id)
+    course_ref = _get_course_progress_document_ref(user_id, course_id)
 
     def write_doc():
         topic_doc_ref.set({
@@ -355,6 +452,7 @@ async def _save_topic_flashcard_progress(
             "flashcardUpdatedAt": updated_at,
             "lastStudiedAt": updated_at,
         }, merge=True)
+        course_ref.set({"updatedAt": updated_at}, merge=True)
 
     await asyncio.to_thread(write_doc)
 
@@ -425,20 +523,48 @@ async def _collect_user_srs_items(user_id: str) -> List[dict]:
     if db is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Firestore client is not initialized.")
 
+    user_prefix = f"users/{user_id}/"
     user_ref = db.collection("users").document(user_id)
-    course_refs = await asyncio.to_thread(lambda: list(user_ref.collection("course_progress").stream()))
+    
+    def read_topic_progress_docs():
+        return list(
+            db.collection_group("topic_progress")
+            .where("__name__", ">=", user_ref.path)
+            .where("__name__", "<=", user_ref.path + "/~")
+            .stream()
+        )
+
+    topic_docs = await asyncio.to_thread(read_topic_progress_docs)
     due_items: List[dict] = []
 
-    for course_doc in course_refs:
-        topic_refs = await asyncio.to_thread(lambda: list(course_doc.reference.collection("topic_progress").stream()))
-        for topic_doc in topic_refs:
-            srs_refs = await asyncio.to_thread(lambda: list(topic_doc.reference.collection("srs_items").stream()))
-            for srs_doc in srs_refs:
-                item = srs_doc.to_dict()
-                item["course_id"] = course_doc.id
-                item["topic_id"] = topic_doc.id
-                item["vocab_id"] = srs_doc.id
-                due_items.append(item)
+    for topic_doc in topic_docs:
+        ref_path = topic_doc.reference.path
+        if not ref_path.startswith(user_prefix):
+            continue
+
+        path_parts = ref_path.split("/")
+        if len(path_parts) < 6:
+            continue
+
+        if path_parts[0] != "users" or path_parts[2] != "course_progress" or path_parts[4] != "topic_progress":
+            continue
+
+        course_id = path_parts[3]
+        topic_id = path_parts[5]
+        if not course_id or not topic_id:
+            continue
+
+        topic_data = topic_doc.to_dict() or {}
+        srs_items = topic_data.get("srs_items", {})
+        if not isinstance(srs_items, dict):
+            continue
+
+        for vocab_id, item_data in srs_items.items():
+            item = dict(item_data) if isinstance(item_data, dict) else {}
+            item["course_id"] = course_id
+            item["topic_id"] = topic_id
+            item["vocab_id"] = vocab_id
+            due_items.append(item)
 
     return due_items
 
@@ -481,7 +607,20 @@ async def get_topic_flashcard_progress(
         flashcardCurrentIndex=int(data.get("flashcardCurrentIndex", 0)),
         flashcardViewedCards=list(data.get("flashcardViewedCards", [])),
         flashcardUpdatedAt=data.get("flashcardUpdatedAt"),
+        srs_items=data.get("srs_items", {}) if isinstance(data.get("srs_items", {}), dict) else {},
     )
+
+
+@router.get("/courses/{course_id}/topics/{topic_id}/flashcard-page", response_model=FlashcardPageResponse)
+async def get_flashcard_page(
+    course_id: str,
+    topic_id: str,
+    user_id: str = Query(..., description="User ID to fetch the flashcard page data"),
+    file_name: Optional[str] = Query(None, description="Tên file JSON dữ liệu vocab local")
+):
+    vocab_items = _filter_vocabularies(course_id, topic_id, file_name)
+    progress = await _get_topic_progress(user_id, course_id, topic_id)
+    return FlashcardPageResponse(**FlashcardService.build_flashcard_page(vocab_items, progress))
 
 
 @router.post("/courses/{course_id}/topics/{topic_id}/flashcard-progress")
@@ -541,8 +680,8 @@ async def get_topic_vocabularies(
 
 @router.post("/srs/review")
 async def review_srs_item(review: SRSReviewRequest):
-    if not (0 <= review.quality <= 5):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Quality phải nằm giữa 0 và 5.")
+    if not (1 <= review.quality <= 4):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Quality phải nằm giữa 1 và 4.")
     
     existing_map = await _get_user_srs_map(review.user_id, review.course_id, review.topic_id)
     existing = existing_map.get(review.vocab_id, {})
@@ -566,8 +705,14 @@ async def review_srs_item(review: SRSReviewRequest):
         "updatedAt": now,
     }
 
-    await _save_srs_item(review.user_id, review.course_id, review.topic_id, review.vocab_id, progress_record)
-    await _update_topic_last_studied(review.user_id, review.course_id, review.topic_id, now)
+    await _save_srs_item(
+        review.user_id,
+        review.course_id,
+        review.topic_id,
+        review.vocab_id,
+        progress_record,
+        now,
+    )
 
     return {
         "status": "success",

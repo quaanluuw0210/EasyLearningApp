@@ -49,8 +49,8 @@ export const SRS_DEBOUNCE_TIME_MS = 10_000;
 export const RATING_TO_QUALITY: Record<SrsRating, number> = {
   again: 1,
   hard: 2,
-  good: 4,
-  easy: 5,
+  good: 3,
+  easy: 4,
 };
 
 export const RATING_INTERVAL_LABELS: Record<SrsRating, string> = {
@@ -59,6 +59,107 @@ export const RATING_INTERVAL_LABELS: Record<SrsRating, string> = {
   good: "<10m",
   easy: "5d",
 };
+
+// ─── Frontend mirror of backend _calculate_sm2 ───────────────────────
+
+export interface Sm2Result {
+  ef: number;
+  repetitions: number;
+  interval: number;
+  nextReviewDate: string;
+}
+
+/**
+ * Exact mirror of backend `_calculate_sm2()`.
+ * Backend is SOURCE OF TRUTH — this must stay in sync.
+ */
+export function calculateSm2(
+  quality: number,
+  ef: number,
+  repetitions: number,
+  interval: number,
+): Sm2Result {
+  const now = new Date();
+
+  let efPrime = ef + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
+  efPrime = Math.max(1.3, efPrime);
+
+  // AGAIN (quality === 1) → 1 minute
+  if (quality === 1) {
+    return {
+      ef: efPrime,
+      repetitions: 0,
+      interval: 0,
+      nextReviewDate: new Date(now.getTime() + 1 * 60_000).toISOString(),
+    };
+  }
+
+  // HARD (quality === 2) → 6 minutes
+  if (quality === 2) {
+    return {
+      ef: efPrime,
+      repetitions: 0,
+      interval: 0,
+      nextReviewDate: new Date(now.getTime() + 6 * 60_000).toISOString(),
+    };
+  }
+
+  // GOOD (quality === 3) → 10 minutes
+  if (quality === 3) {
+    return {
+      ef: efPrime,
+      repetitions: repetitions + 1,
+      interval: 0,
+      nextReviewDate: new Date(now.getTime() + 10 * 60_000).toISOString(),
+    };
+  }
+
+  // EASY (quality === 4)
+  if (quality === 4) {
+    let newReps = repetitions;
+    let newInterval = interval;
+
+    if (repetitions === 0) {
+      newReps = 1;
+      newInterval = 5;
+    } else {
+      newInterval = Math.max(1, Math.round(Math.max(interval, 1) * efPrime));
+      newReps = repetitions + 1;
+    }
+
+    return {
+      ef: efPrime,
+      repetitions: newReps,
+      interval: newInterval,
+      nextReviewDate: new Date(now.getTime() + newInterval * 86_400_000).toISOString(),
+    };
+  }
+
+  // Fallback
+  return {
+    ef: efPrime,
+    repetitions,
+    interval,
+    nextReviewDate: now.toISOString(),
+  };
+}
+
+/**
+ * Compute preview interval labels for each rating button.
+ */
+export function getIntervalLabelsForItem(
+  ef: number,
+  repetitions: number,
+  interval: number,
+): Record<SrsRating, string> {
+  const easyResult = calculateSm2(4, ef, repetitions, interval);
+  return {
+    again: "1m",
+    hard: "6m",
+    good: "10m",
+    easy: `${easyResult.interval}d`,
+  };
+}
 
 /**
  * Storage keys helper
@@ -256,39 +357,37 @@ export function saveLocalSrsItemState(
     console.error("Error saving local SRS item state:", err);
   }
 }
-
-export function isItemDue(item: VocabularyItem, sessionRatedIds: Set<string> = new Set(), now: Date = new Date()): boolean {
-  const isSessionLearning = sessionRatedIds.has(item.id);
-  const repetitions = item.repetitions ?? (item.step && item.step > 0 ? 1 : 0);
-  const interval = item.interval ?? 0;
-  const nextReviewRaw = item.nextReviewDate || item.nextReview || item.srs_progress?.nextReviewDate;
-
-  let isDueTime = false;
-  let hasNextReview = false;
-  if (nextReviewRaw) {
-    hasNextReview = true;
-    const reviewDate = new Date(nextReviewRaw);
-    if (!isNaN(reviewDate.getTime())) {
-      isDueTime = reviewDate <= now;
-    }
-  }
-
-  if (isSessionLearning || (repetitions > 0 && interval < 1)) {
-    // 2. Learning
-    return true;
-  } else if (repetitions === 0 && interval === 0 && !hasNextReview) {
-    // 1. New
-    return true;
-  } else if (isDueTime) {
-    // 4. Review
+export function isItemDue(
+  item: VocabularyItem,
+  sessionRatedIds: Set<string> = new Set(),
+  now: Date = new Date()
+): boolean {
+  // Đã đánh giá trong session → cho phép quay lại queue
+  if (sessionRatedIds.has(item.id)) {
     return true;
   }
-  // 3. Đã học nhưng chưa đến hạn: false
-  return false;
+
+  const nextReviewRaw =
+    item.nextReviewDate ??
+    item.nextReview ??
+    item.srs_progress?.nextReviewDate;
+
+  // Chưa từng học
+  if (!nextReviewRaw) {
+    return true;
+  }
+
+  const nextReview = new Date(nextReviewRaw);
+
+  if (isNaN(nextReview.getTime())) {
+    return true;
+  }
+
+  return nextReview <= now;
 }
 
 export function calculateAnkiCounts(
-  items: VocabularyItem[], 
+  items: VocabularyItem[],
   sessionRatedIds: Set<string> = new Set()
 ): {
   newCount: number;
@@ -298,42 +397,64 @@ export function calculateAnkiCounts(
   let newCount = 0;
   let learningCount = 0;
   let reviewCount = 0;
-  const now = new Date();
 
+  const now = new Date();
   const processedIds = new Set<string>();
 
   items.forEach((item) => {
     if (processedIds.has(item.id)) return;
     processedIds.add(item.id);
 
-    const isRatedInSession = sessionRatedIds.has(item.id);
-    const repetitions = item.repetitions ?? item.srs_progress?.repetitions ?? 0;
-    const nextReviewRaw = item.nextReviewDate || item.nextReview || item.srs_progress?.nextReviewDate;
+    const repetitions =
+      item.repetitions ??
+      item.srs_progress?.repetitions ??
+      0;
 
-    let isDue = false;
-    let hasNextReview = false;
+    const nextReviewRaw =
+      item.nextReviewDate ||
+      item.nextReview ||
+      item.srs_progress?.nextReviewDate;
 
+    // =========================
+    // 1. TỪ MỚI
+    // =========================
+    if (repetitions === 0 && !nextReviewRaw) {
+      newCount++;
+      return;
+    }
+
+    // =========================
+    // 2. ĐÃ HỌC → kiểm tra lịch
+    // =========================
     if (nextReviewRaw) {
       const reviewDate = new Date(nextReviewRaw);
+
       if (!isNaN(reviewDate.getTime())) {
-        hasNextReview = true;
-        isDue = reviewDate <= now; // Đã đến lịch hoặc quá hạn
+        if (reviewDate <= now) {
+          learningCount++;
+          return;
+        }
+
+        reviewCount++;
+        return;
       }
     }
 
-    // 1. TỪ MỚI (Xanh dương): Chưa từng ôn tập bao giờ (repetitions = 0) và chưa bấm trong session này
-    if (!isRatedInSession && repetitions === 0 && !hasNextReview) {
-      newCount++;
-    } 
-    // 2. ĐÃ ĐẾN HẠN / CẦN ÔN (Đỏ): Đã đến/quá hạn ôn OR vừa bấm Again/Hard trong session
-    else if (isDue || item.step === 1) {
+    // =========================
+    // 3. Đã học nhưng không có lịch
+    // =========================
+    if (repetitions > 0) {
       learningCount++;
-    } 
-    // 3. CHƯA ĐẾN LỊCH (Xanh lá): Đã học rồi (repetitions > 0) VÀ ngày hẹn ở tương lai (ReviewDate > Now)
-    else {
-      reviewCount++;
+      return;
     }
+
+    // fallback
+    newCount++;
   });
 
-  return { newCount, learningCount, reviewCount };
+  return {
+    newCount,
+    learningCount,
+    reviewCount,
+  };
 }

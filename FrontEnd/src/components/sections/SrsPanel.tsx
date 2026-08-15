@@ -6,8 +6,10 @@ import { useAuth } from "@/context/AuthContext";
 import { learningApi, VocabularyWithSRS } from "@/lib/api";
 import {
   calculateAnkiCounts,
+  calculateSm2,
   enqueueSrsReview,
   flushPendingSrsLogs,
+  getIntervalLabelsForItem,
   RATING_INTERVAL_LABELS,
   RATING_TO_QUALITY,
   saveLocalSrsItemState,
@@ -52,6 +54,8 @@ function speakText(text?: string) {
   window.speechSynthesis.speak(utterance);
 }
 
+
+
 export default function SrsPanel({
   dueWords = [],
   allWords = [],
@@ -72,7 +76,7 @@ export default function SrsPanel({
   const [reviewedCount, setReviewedCount] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isExtraMode, setIsExtraMode] = useState<boolean>(false);
-
+  const [sessionItems, setSessionItems] = useState<VocabularyItem[]>([]);
   const isInitializedRef = useRef<boolean>(false);
   const initializationKeyRef = useRef<string | null>(null);
   const actionCounterRef = useRef<number>(0);
@@ -205,8 +209,9 @@ export default function SrsPanel({
           const emptySet = new Set<string>();
           const dueMapped = mapped.filter((item) => isItemDue(item, emptySet, now));
 
-          setQueue(dueMapped);
+          setSessionItems(mapped);
           setInitialSessionItems(mapped);
+          setQueue(dueMapped);
           isInitializedRef.current = true;
         })
         .catch((err) => {
@@ -244,16 +249,17 @@ export default function SrsPanel({
   const currentWord = queue[0];
   const totalQueueCount = queue.length;
 
-  const labels = useMemo(
-    () => ({ ...RATING_INTERVAL_LABELS, ...intervalLabels }),
-    [intervalLabels]
-  );
+  const labels = useMemo(() => {
+    if (!currentWord) return { ...RATING_INTERVAL_LABELS, ...intervalLabels };
+    const ef = currentWord.easeFactor ?? currentWord.srs_progress?.ef ?? 2.5;
+    const reps = currentWord.repetitions ?? currentWord.srs_progress?.repetitions ?? 0;
+    const ivl = currentWord.interval ?? currentWord.srs_progress?.interval ?? 0;
+    return { ...getIntervalLabelsForItem(ef, reps, ivl), ...intervalLabels };
+  }, [currentWord, intervalLabels]);
 
-  // ✅ Tính toán bộ đếm dựa trên TỔNG SỐ TỪ VỰNG của bài học
 const counts = useMemo(() => {
-  const totalList = initialSessionItems.length > 0 ? initialSessionItems : allWords;
-  return calculateAnkiCounts(totalList, sessionRatedIds);
-}, [initialSessionItems, allWords, sessionRatedIds]);
+  return calculateAnkiCounts(sessionItems, sessionRatedIds);
+}, [sessionItems, sessionRatedIds]);
 
   // Auto play audio when word changes
   useEffect(() => {
@@ -267,101 +273,119 @@ const counts = useMemo(() => {
   }, []);
 
   const handleRate = useCallback(
-    (rating: SrsRating) => {
-      if (!currentWord) return;
+  (rating: SrsRating) => {
+    if (!currentWord) return;
 
-      const activeCourseId = currentWord.courseId || courseId || "default_course";
-      const activeTopicId = currentWord.topicId || topicId || "default_topic";
-      const quality = RATING_TO_QUALITY[rating];
+    const activeCourseId =
+      currentWord.courseId || courseId || "default_course";
+    const activeTopicId =
+      currentWord.topicId || topicId || "default_topic";
+    const quality = RATING_TO_QUALITY[rating];
 
-      // 1. LOCAL-FIRST UPDATE: Update LocalStorage immediately without waiting for API
-      const reviewedAtStr = new Date().toISOString();
-      enqueueSrsReview(userId, {
-        courseId: activeCourseId,
-        topicId: activeTopicId,
-        vocabId: currentWord.id,
-        rating,
-        quality,
-        reviewedAt: reviewedAtStr,
-      });
+    // 1. Compute SM2 locally (same logic as backend _calculate_sm2)
+    const currentEf = currentWord.easeFactor ?? currentWord.srs_progress?.ef ?? 2.5;
+    const currentReps = currentWord.repetitions ?? currentWord.srs_progress?.repetitions ?? 0;
+    const currentInterval = currentWord.interval ?? currentWord.srs_progress?.interval ?? 0;
+    const sm2 = calculateSm2(quality, currentEf, currentReps, currentInterval);
 
-      // ✅ CODE ĐÃ SỬA CHUẨN:
-      const isRepeat = rating === "again" || rating === "hard";
+    const reviewedAtStr = new Date().toISOString();
 
-      let minutesToAdd = 0;
-      let daysToAdd = 0;
+    // 2. Enqueue for batch sync to backend
+    enqueueSrsReview(userId, {
+      courseId: activeCourseId,
+      topicId: activeTopicId,
+      vocabId: currentWord.id,
+      rating,
+      quality,
+      reviewedAt: reviewedAtStr,
+    });
 
-      // Quy đổi thời gian ôn tập tiếp theo chuẩn theo UI nhãn Anki
-      switch (rating) {
-        case "again":
-          minutesToAdd = 1;  // <1m (1 phút sau lặp lại)
-          break;
-        case "hard":
-          minutesToAdd = 6;  // <6m (6 phút sau)
-          break;
-        case "good":
-          minutesToAdd = 10; // <10m (10 phút sau)
-          break;
-        case "easy":
-          daysToAdd = 5;     // 5d (5 ngày sau)
-          break;
-      }
-
-      const nextDate = new Date();
-      if (minutesToAdd > 0) {
-        nextDate.setMinutes(nextDate.getMinutes() + minutesToAdd);
-      } else if (daysToAdd > 0) {
-        nextDate.setDate(nextDate.getDate() + daysToAdd);
-      }
-
-      const nextReviewDateStr = nextDate.toISOString();
-      const nextInterval = daysToAdd > 0 ? daysToAdd : 0;
-
-      saveLocalSrsItemState(activeCourseId, activeTopicId, userId, currentWord.id, {
-        step: isRepeat ? 1 : 2,
-        interval: nextInterval,
+    // 3. Save full SM2 state to localStorage for offline recovery
+    saveLocalSrsItemState(
+      activeCourseId,
+      activeTopicId,
+      userId,
+      currentWord.id,
+      {
         lastReviewedAt: reviewedAtStr,
-        nextReviewDate: nextReviewDateStr,
-      });
+        quality,
+        easeFactor: sm2.ef,
+        repetitions: sm2.repetitions,
+        interval: sm2.interval,
+        nextReviewDate: sm2.nextReviewDate,
+        nextReview: sm2.nextReviewDate,
+      }
+    );
 
-      // Execute custom callback if provided
-      onRate?.(currentWord, rating);
+    // 4. Build updated word with full SM2 state for instant UI update
+    const updatedWord: VocabularyItem = {
+      ...currentWord,
+      lastReviewedAt: reviewedAtStr,
+      quality,
+      easeFactor: sm2.ef,
+      repetitions: sm2.repetitions,
+      interval: sm2.interval,
+      nextReviewDate: sm2.nextReviewDate,
+      nextReview: sm2.nextReviewDate,
+      srs_progress: {
+        ef: sm2.ef,
+        repetitions: sm2.repetitions,
+        interval: sm2.interval,
+        nextReviewDate: sm2.nextReviewDate,
+        lastReviewedAt: reviewedAtStr,
+        quality,
+      },
+    };
 
-      // Schedule debounced sync to Firebase
-      scheduleSync();
+    setSessionItems((prevItems) =>
+      prevItems.map((item) =>
+        item.id === currentWord.id ? updatedWord : item
+      )
+    );
 
-      // Update session tracking state
-      setSessionRatedIds((prev) => new Set(prev).add(currentWord.id));
-      setReviewedCount((c) => c + 1);
-      setIsFlipped(false);
+    onRate?.(currentWord, rating);
+    scheduleSync();
 
-      // 2. INSTANT ANKI QUEUE UPDATE
-      setQueue((prevQueue) => {
-        const [finishedWord, ...remaining] = prevQueue;
-        let nextQueue: VocabularyItem[];
+    setSessionRatedIds((prev) => {
+      const next = new Set(prev);
+      next.add(currentWord.id);
+      return next;
+    });
 
-        // Again or Hard -> Push to end of queue to relearn in this session
-        if (rating === "again" || rating === "hard") {
-          const updatedWord = {
-            ...finishedWord,
-            step: 1,
-          };
-          nextQueue = [...remaining, updatedWord];
-        } else {
-          // Good or Easy -> Remove from active queue
-          nextQueue = remaining;
-        }
+    setReviewedCount((c) => c + 1);
+    setIsFlipped(false);
 
-        // If queue becomes empty, trigger immediate flush
-        if (nextQueue.length === 0) {
-          setTimeout(() => triggerBatchSync(), 50);
-        }
+    setQueue((prevQueue) => {
+      const [, ...remaining] = prevQueue;
 
-        return nextQueue;
-      });
-    },
-    [currentWord, courseId, topicId, userId, onRate, scheduleSync, triggerBatchSync]
-  );
+      let nextQueue: VocabularyItem[];
+
+      if (rating === "again" || rating === "hard") {
+        nextQueue = [
+          ...remaining,
+          updatedWord,
+        ];
+      } else {
+        nextQueue = remaining;
+      }
+
+      if (nextQueue.length === 0) {
+        setTimeout(() => triggerBatchSync(), 50);
+      }
+
+      return nextQueue;
+    });
+  },
+  [
+    currentWord,
+    courseId,
+    topicId,
+    userId,
+    onRate,
+    scheduleSync,
+    triggerBatchSync,
+  ]
+);
 
   // Keyboard Shortcuts Handler — chỉ còn phím 1-4 để đánh giá sau khi đã lật.
   // Đã bỏ Space/Enter để lật thẻ theo yêu cầu (chỉ chạm/click vào thẻ mới lật).
@@ -422,15 +446,10 @@ const counts = useMemo(() => {
         </div>
 
         <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
-          {initialSessionItems.length > 0 && (
-            <button
-              type="button"
-              onClick={startEarlyReview}
-              className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-md transition hover:bg-slate-800 active:scale-95 cursor-pointer"
-            >
-              <RefreshCw size={16} /> Ôn lại danh sách này
-            </button>
-          )}
+          <p className="text-sm text-slate-500">
+            Muốn học thêm? Hãy chuyển sang <span className="font-bold text-emerald-600">Flashcard </span>
+            hoặc các hoạt động học tập khác nhé.
+          </p>
 
           {onFinish && (
             <button
@@ -443,7 +462,7 @@ const counts = useMemo(() => {
           )}
         </div>
       </div>
-    );
+    );  
   }
 
   return (

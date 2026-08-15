@@ -42,6 +42,31 @@ export interface VocabularyItem {
   exampleSentence?: string;
 }
 
+export interface FlashcardSrsView {
+  ef?: number;
+  repetitions?: number;
+  interval?: number;
+  nextReviewDate?: string | null;
+  lastReviewedAt?: string | null;
+  quality?: number;
+}
+
+export interface FlashcardVocabularyItem {
+  vocabId: string;
+  word: string;
+  partOfSpeech?: string;
+  phonetic?: string;
+  meaningVi?: string;
+  exampleSentence?: string;
+  srs?: FlashcardSrsView | null;
+}
+
+export interface FlashcardPageResponse {
+  vocabularies: FlashcardVocabularyItem[];
+  flashcardCurrentIndex: number;
+  flashcardViewedCards: number[];
+}
+
 export interface VocabularyWithSRS extends VocabularyItem {
   srs_progress?: SRSProgress | null;
 }
@@ -153,6 +178,17 @@ export const learningApi = {
     return promise;
   },
 
+  getFlashcardPage: async (courseId: string, topicId: string, userId: string, fileName?: string) => {
+    const url = new URL(`${API_BASE_URL}/api/v1/learning/courses/${courseId}/topics/${topicId}/flashcard-page`);
+    url.searchParams.set("user_id", userId);
+    if (fileName) url.searchParams.set("file_name", fileName);
+    const res = await apiFetch(url.toString());
+    if (!res.ok) {
+      throw new Error(`HTTP Error: ${res.status}`);
+    }
+    return res.json() as Promise<FlashcardPageResponse>;
+  },
+
   getDueCards: async (userId: string, fileName?: string) => {
     const url = new URL(`${API_BASE_URL}/api/v1/learning/srs/due-cards/${userId}`);
     if (fileName) url.searchParams.set("file_name", fileName);
@@ -250,60 +286,3 @@ export interface SaveFlashcardTopicProgressRequest {
   flashcardViewedCards: number[];
   flashcardUpdatedAt?: string;
 }
-
-export const itineraryApi = {
-
-
-  get: async (userId: string) => {
-    const res = await apiFetch(`${API_BASE_URL}/api/v1/itinerary/${userId}`);
-    return res.json();
-  },
-  select: async (userId: string, meal: string, restaurantData: any) => {
-    const res = await apiFetch(`${API_BASE_URL}/api/v1/itinerary/select`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: userId, meal, restaurant_data: restaurantData }),
-    });
-    return res.json();
-  },
-  deleteMeal: async (userId: string, itemId: string) => {
-    const res = await apiFetch(`${API_BASE_URL}/api/v1/itinerary/${userId}/${itemId}`, {
-      method: "DELETE",
-    });
-    return res.json();
-  },
-  reset: async (userId: string) => {
-    const res = await apiFetch(`${API_BASE_URL}/api/v1/itinerary/${userId}`, {
-      method: "DELETE",
-    });
-    return res.json();
-  },
-  reorder: async (userId: string, orderedItems: { id: string }[]) => {
-    const res = await apiFetch(`${API_BASE_URL}/api/v1/itinerary/reorder`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: userId, ordered_items: orderedItems }),
-    });
-    return res.json();
-  },
-  share: async (userId: string, itineraryData: any[]) => {
-    const res = await apiFetch(`${API_BASE_URL}/api/v1/itinerary/share`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: userId, itinerary_data: itineraryData }),
-    });
-    return res.json();
-  },
-  importShared: async (userId: string, shareId: string) => {
-    const res = await apiFetch(`${API_BASE_URL}/api/v1/itinerary/import-shared`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: userId, share_id: shareId }),
-    });
-    return res.json();
-  },
-  getPublic: async (shareId: string) => {
-    const res = await apiFetch(`${API_BASE_URL}/public/${shareId}`);
-    return res.json();
-  },
-};

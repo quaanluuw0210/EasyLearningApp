@@ -3,37 +3,11 @@
 
 import LearningContentPanel from "@/components/sections/LearningContentPanel";
 import type { LearningMethodId } from "@/lib/learningMockData";
-import type { Restaurant } from "@/lib/utils";
-
-type ChatMessage = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp?: string;
-  isCompact?: boolean;
-  restaurants?: Restaurant[];
-  metadata?: {
-    restaurants?: Restaurant[];
-  };
-};
 
 type ChatInterfaceProps = {
-  placeId: string;
   chatId?: string | null;
-  messages?: ChatMessage[];
-  onMessagesChange?: (messages: ChatMessage[]) => void;
-  onRestaurantsSelect?: (restaurants: Restaurant[]) => void;
   onRestaurantSelect?: (restaurantId: string) => void;
-  onRefreshHistory?: () => void;
-  onAutoCreateChat?: () => Promise<string | null>;
   currentItinerary?: any[];
-  onSelectMeal?: (meal: string, restaurant: Restaurant) => void;
-  fetchItinerary?: () => Promise<void>;
-  input?: string;
-  onInputChange?: (value: string) => void;
-  hasHealthProfile?: boolean;
-  onOpenHealthProfile?: () => void;
-  onLocationResolved?: (location: { location: string; placeId: string }) => void;
   selectedLearningMethod: LearningMethodId;
   selectedCourseId?: string;
   selectedCourseTitle?: string;
@@ -42,11 +16,14 @@ type ChatInterfaceProps = {
 };
 
 export default function ChatInterface({
+  chatId,
+  onRestaurantSelect,
+  currentItinerary,
   selectedLearningMethod,
   selectedCourseId,
   selectedCourseTitle,
   selectedTopicId,
-  selectedTopicTitle
+  selectedTopicTitle,
 }: ChatInterfaceProps) {
   return (
     /* 1. Trả lại h-full & flex-1 cho Wrapper ngoài cùng */

@@ -3,7 +3,7 @@
 import { ArrowLeft, ArrowRight, Volume2, CheckCircle2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { learningApi, VocabularyItem } from "@/lib/api";
+import { FlashcardVocabularyItem, learningApi } from "@/lib/api";
 import {
   FLASHCARD_SYNC_DEBOUNCE_MS,
   FLASHCARD_SYNC_ACTION_THRESHOLD,
@@ -37,7 +37,7 @@ export default function FlashcardPanel({
   const { user } = useAuth();
   const userId = user?.uid ?? "guest";
 
-  const [vocabList, setVocabList] = useState<VocabularyItem[]>([]);
+  const [vocabList, setVocabList] = useState<FlashcardVocabularyItem[]>([]);
   const [currentCardIndex, setCurrentCardIndex] = useState<number>(0);
   const [isFlipped, setIsFlipped] = useState<boolean>(false);
   const [viewedCards, setViewedCards] = useState<number[]>([]);
@@ -170,9 +170,8 @@ export default function FlashcardPanel({
     setError(null);
 
     try {
-      // 1. Fetch vocabulary list for topic
-      const data = await learningApi.getVocabularies(courseId!, topicId!, userId);
-      const items: VocabularyItem[] = data || [];
+      const page = await learningApi.getFlashcardPage(courseId!, topicId!, userId);
+      const items = page.vocabularies || [];
       if (loadVersion !== loadVersionRef.current) return;
       setVocabList(items);
 
@@ -181,21 +180,21 @@ export default function FlashcardPanel({
         return;
       }
 
-      // 2. Restore progress from LocalStorage immediately
       const localProgress = getFlashcardProgressFromStorage(courseId!, topicId!, userId);
-      let initialIndex = 0;
-      let initialViewed: number[] = [0];
+      let initialIndex = Math.min(page.flashcardCurrentIndex || 0, items.length - 1);
+      let initialViewed: number[] = Array.isArray(page.flashcardViewedCards) && page.flashcardViewedCards.length > 0
+        ? [...page.flashcardViewedCards]
+        : [0];
 
       if (localProgress) {
         initialIndex = Math.min(localProgress.currentCardIndex, items.length - 1);
-        initialViewed = Array.from(new Set([...localProgress.viewedCards, initialIndex]));
+        initialViewed = Array.from(new Set([...localProgress.viewedCards, ...initialViewed, initialIndex]));
       }
 
       setCurrentCardIndex(initialIndex);
       setIsFlipped(false);
       setViewedCards(initialViewed);
 
-      // Save initial state if not in localStorage
       if (!localProgress) {
         saveFlashcardProgressToStorage(
           courseId!,
@@ -209,43 +208,25 @@ export default function FlashcardPanel({
         );
       }
 
-      // 3. Asynchronously fetch backend progress if user is logged in
       if (user && userId !== "guest") {
-        learningApi
-          .getTopicFlashcardProgress(courseId!, topicId!, userId)
-          .then((remote) => {
-            if (loadVersion !== loadVersionRef.current) return;
-            if (remote && typeof remote.flashcardCurrentIndex === "number") {
-              const remoteIndex = Math.min(remote.flashcardCurrentIndex, items.length - 1);
-              const remoteViewed = remote.flashcardViewedCards || [];
-
-              // Merge viewed cards from local and remote
-              setViewedCards((prevViewed) => {
-                const merged = Array.from(new Set([...prevViewed, ...remoteViewed])).sort((a, b) => a - b);
-
-                // Keep local index if user has already navigated, otherwise remote index
-                setCurrentCardIndex((prevIdx) => {
-                  const finalIdx = actionCounterRef.current > 0 ? prevIdx : remoteIndex;
-                  saveFlashcardProgressToStorage(
-                    courseId!,
-                    topicId!,
-                    {
-                      currentCardIndex: finalIdx,
-                      viewedCards: merged,
-                      updatedAt: new Date().toISOString(),
-                    },
-                    userId
-                  );
-                  return finalIdx;
-                });
-
-                return merged;
-              });
-            }
-          })
-          .catch((err) => {
-            console.log("Remote progress not available yet:", err);
+        setViewedCards((prevViewed) => {
+          const merged = Array.from(new Set([...prevViewed, ...initialViewed])).sort((a, b) => a - b);
+          setCurrentCardIndex((prevIdx) => {
+            const finalIdx = actionCounterRef.current > 0 ? prevIdx : initialIndex;
+            saveFlashcardProgressToStorage(
+              courseId!,
+              topicId!,
+              {
+                currentCardIndex: finalIdx,
+                viewedCards: merged,
+                updatedAt: new Date().toISOString(),
+              },
+              userId
+            );
+            return finalIdx;
           });
+          return merged;
+        });
       }
     } catch (err) {
       console.error(err);
