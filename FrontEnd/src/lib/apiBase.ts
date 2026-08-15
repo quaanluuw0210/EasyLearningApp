@@ -1,4 +1,5 @@
-const DEFAULT_API_ORIGIN = "https://api.bmi-foodtour.io.vn";
+// Cập nhật URL mặc định sang domain Render mới của bạn
+const DEFAULT_API_ORIGIN = "https://easylearningapp.onrender.com";
 
 const trimTrailingSlash = (value: string) => value.replace(/\/+$/, "");
 
@@ -15,10 +16,11 @@ export const getApiOrigin = () => {
 };
 
 export const getApiV1BaseUrl = () => {
+  // Ưu tiên BASE_URL trước để lấy chính xác đường dẫn /api/v1 nếu có
   const configuredUrl =
-    process.env.API_BASE_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
     process.env.NEXT_PUBLIC_API_BASE_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.API_BASE_URL ||
     DEFAULT_API_ORIGIN;
 
   const normalizedUrl = trimTrailingSlash(configuredUrl);
