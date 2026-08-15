@@ -2,63 +2,71 @@
 
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
-import { MapPin, MessageSquare, Map, HeartPulse, AlertTriangle, ShieldCheck } from "lucide-react";
+import {
+  Compass,
+  ListChecks,
+  GraduationCap,
+  ListOrdered,
+  Layers,
+  Brain,
+  Sparkles
+} from "lucide-react";
 import { motion } from "framer-motion";
 
 const steps = [
   {
-    title: "Thiết lập cơ bản",
+    title: "Vào trang Khám phá",
     description:
-      "Nhập vị trí bắt đầu bằng thanh tìm kiếm Autocomplete và đặt ngân sách tổng cho cả ngày để hệ thống cân bằng hợp lý.",
-    icon: MapPin
+      "Truy cập trang Khám phá để xem toàn bộ khóa học và chủ đề từ vựng hiện có, được sắp xếp theo chủ đề và trình độ.",
+    icon: Compass
   },
   {
-    title: "Ra lệnh cho AI",
+    title: "Chọn bộ từ phù hợp",
     description:
-      "Nhập câu lệnh (Prompt) thể hiện rõ sở thích món ăn, phong cách quán và thứ tự bữa ăn. AI kết hợp với hồ sơ sức khỏe để gợi ý chính xác.",
-    icon: MessageSquare
+      "Chọn khóa học và chủ đề từ vựng phù hợp với mục tiêu và trình độ hiện tại của bạn để bắt đầu học.",
+    icon: ListChecks
   },
   {
-    title: "Tương tác với lộ trình",
+    title: "Chọn phương pháp học",
     description:
-      "Đọc thẻ thông tin quán ăn (giá, độ cay, điểm đánh giá) và xem đường đi trực quan trên bản đồ để quyết định nhanh.",
-    icon: Map
+      "Chọn 1 trong 3 cách học: xem Danh sách từ vựng, học bằng Flashcard, hoặc ôn tập theo phương pháp Học ngắt quãng.",
+    icon: GraduationCap
   }
 ];
 
-const promptCards = [
+const methodSteps = [
   {
-    label: "Kém hiệu quả",
-    tone: "from-rose-500 to-red-500",
-    text: "Tôi muốn tìm quán ăn ngon ở Quận 1.",
-    note: "Quá chung chung, AI tự chia đều ngân sách ngẫu nhiên."
+    title: "Danh sách từ vựng",
+    description:
+      "Xem toàn bộ từ vựng của chủ đề dưới dạng danh sách: từ, loại từ, phiên âm, nghĩa và ví dụ. Phù hợp để lướt nhanh và tra cứu.",
+    icon: ListOrdered
   },
   {
-    label: "Tối ưu",
+    title: "Flashcard",
+    description:
+      "Học từng thẻ một, chạm để lật thẻ xem nghĩa và ví dụ minh họa. Vuốt hoặc bấm nút để chuyển sang thẻ tiếp theo, phù hợp để làm quen từ mới.",
+    icon: Layers
+  },
+  {
+    title: "Học ngắt quãng (SRS)",
+    description:
+      "Ôn tập theo thuật toán lặp lại ngắt quãng: lật thẻ rồi chọn mức độ nhớ Again / Hard / Good / Easy để hệ thống tự sắp xếp lịch ôn tối ưu.",
+    icon: Brain
+  }
+];
+
+const methodCompareCards = [
+  {
+    label: "Mới bắt đầu",
+    tone: "from-rose-500 to-orange-500",
+    text: "Bắt đầu bằng Danh sách từ vựng hoặc Flashcard để làm quen mặt chữ, nghĩa và cách phát âm.",
+    note: "Giúp bạn nắm tổng quan nhanh trước khi ôn sâu."
+  },
+  {
+    label: "Muốn nhớ lâu dài",
     tone: "from-emerald-400 to-teal-500",
-    text: "Sáng tôi muốn uống cà phê và ăn bánh ngọt nhẹ nhàng, trưa ăn quán Việt Nam tươm tất, tối ưu tiên các quán Âu có không khí lãng mạn.",
-    note: "Có thứ tự bữa ăn, khẩu vị và phong cách rõ ràng."
-  }
-];
-
-const healthSteps = [
-  {
-    title: "Mở Hồ sơ sức khỏe",
-    description:
-      "Bấm biểu tượng trái tim ở thanh điều hướng để mở bảng Hồ sơ sức khỏe bất cứ lúc nào.",
-    icon: HeartPulse
-  },
-  {
-    title: "Chọn bệnh nền & dị ứng",
-    description:
-      "Chọn nhanh các thẻ bệnh nền hoặc dị ứng. Có thể thêm ghi chú ngắn để AI hiểu rõ hơn.",
-    icon: AlertTriangle
-  },
-  {
-    title: "Chọn mức độ ăn kiêng",
-    description:
-      "Chọn Nghiêm ngặt hoặc Xả láng, sau đó bấm Lưu hồ sơ sức khỏe để áp dụng.",
-    icon: ShieldCheck
+    text: "Chuyển sang Học ngắt quãng (SRS) sau khi đã quen mặt từ, để hệ thống tự nhắc ôn đúng thời điểm.",
+    note: "Thuật toán SRS giúp ghi nhớ bền vững, tiết kiệm thời gian ôn tập."
   }
 ];
 
@@ -79,13 +87,10 @@ export default function GuidePage() {
               Hướng dẫn nhanh
             </div>
             <h1 className="font-display text-4xl font-semibold text-slate-900 md:text-5xl">
-              Hướng dẫn sử dụng <span className="text-gradient">BMI</span>
+              Hướng dẫn <span className="text-gradient">học từ vựng</span>
             </h1>
-            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
-              Bite Mapping Intelligent
-            </div>
             <p className="max-w-3xl text-base leading-relaxed text-slate-600 md:text-lg">
-              Làm chủ hệ thống gợi ý lộ trình và cá nhân hóa theo sức khỏe chỉ trong vài bước đơn giản.
+              Khám phá bộ từ vựng phù hợp và chọn phương pháp học yêu thích của bạn chỉ trong vài bước đơn giản.
             </p>
           </motion.div>
 
@@ -127,19 +132,19 @@ export default function GuidePage() {
             className="space-y-3"
           >
             <div className="text-sm font-semibold uppercase tracking-[0.3em] text-brand-lagoon">
-              Hồ sơ sức khỏe
+              3 phương pháp học
             </div>
             <h2 className="font-display text-3xl font-semibold text-slate-900 md:text-4xl">
-              Cá nhân hóa gợi ý theo nhu cầu của bạn
+              Học theo cách phù hợp với bạn
             </h2>
             <p className="max-w-3xl text-sm leading-relaxed text-slate-600 md:text-base">
-              Hồ sơ sức khỏe giúp AI ưu tiên món ăn an toàn và phù hợp với tình trạng của bạn. Cập nhật càng rõ ràng,
-              kết quả càng sát nhu cầu.
+              Mỗi chủ đề từ vựng đều hỗ trợ 3 cách học khác nhau. Bạn có thể chuyển đổi qua lại giữa các phương pháp
+              bất cứ lúc nào, tiến trình học luôn được lưu lại.
             </p>
           </motion.div>
 
           <div className="grid gap-6 md:grid-cols-3">
-            {healthSteps.map((step, index) => {
+            {methodSteps.map((step, index) => {
               const Icon = step.icon;
               return (
                 <motion.div
@@ -175,7 +180,8 @@ export default function GuidePage() {
               Lưu ý nhanh
             </div>
             <p className="mt-4 text-sm leading-relaxed text-slate-600 md:text-base">
-              Khi đã lưu hồ sơ, biểu tượng trái tim sẽ hiện chấm cam để bạn dễ nhận biết. Bạn có thể cập nhật lại bất cứ lúc nào.
+              Tiến trình học (từ đã xem, thẻ đã ôn) được lưu tự động theo từng chủ đề, bạn có thể quay lại tiếp tục
+              học bất cứ lúc nào mà không mất tiến độ.
             </p>
           </motion.div>
         </div>
@@ -191,15 +197,15 @@ export default function GuidePage() {
             className="space-y-3"
           >
             <div className="text-sm font-semibold uppercase tracking-[0.3em] text-brand-flame">
-              Nghệ thuật viết Prompt
+              Nên chọn phương pháp nào?
             </div>
             <h2 className="font-display text-3xl font-semibold text-slate-900 md:text-4xl">
-              Cách viết Prompt để AI hiểu bạn nhất
+              Gợi ý lộ trình học từ vựng
             </h2>
           </motion.div>
 
           <div className="grid gap-6 lg:grid-cols-2">
-            {promptCards.map((card, index) => (
+            {methodCompareCards.map((card, index) => (
               <motion.div
                 key={card.label}
                 initial={{ opacity: 0, y: 20 }}
@@ -211,7 +217,7 @@ export default function GuidePage() {
                 <div className={`inline-flex items-center gap-2 rounded-full bg-gradient-to-r ${card.tone} px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white`}>
                   {card.label}
                 </div>
-                <div className="mt-4 rounded-2xl border border-white/60 bg-slate-950/90 p-4 font-mono text-sm text-slate-200">
+                <div className="mt-4 rounded-2xl border border-white/60 bg-slate-950/90 p-4 text-sm text-slate-200">
                   {card.text}
                 </div>
                 <p className="mt-3 text-sm text-slate-600">{card.note}</p>
@@ -226,17 +232,13 @@ export default function GuidePage() {
             viewport={{ once: true, amount: 0.4 }}
             className="glass rounded-3xl p-6 shadow-soft transition hover:-translate-y-2 hover:shadow-glow"
           >
-            <div className="text-sm font-semibold uppercase tracking-[0.3em] text-brand-lagoon">
-              Mẹo nâng cao
+            <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.3em] text-brand-lagoon">
+              <Sparkles size={16} /> Mẹo nhỏ
             </div>
             <p className="mt-4 text-sm leading-relaxed text-slate-600 md:text-base">
-              Bạn có thể mô tả không gian (view biển, yên tĩnh), khẩu vị (thích ăn cay, đồ chay) ngay trong câu lệnh để AI
-              ưu tiên đúng nhu cầu. Nếu muốn trải nghiệm cao cấp hơn, hãy yêu cầu tăng ngân sách cho bữa tối hoặc toàn bộ
-              lộ trình. Ví dụ tối ưu:
+              Với Học ngắt quãng, hãy đánh giá trung thực mức độ nhớ của mình (Again / Hard / Good / Easy) — chọn đúng
+              mức giúp hệ thống xếp lịch ôn tập chính xác hơn và bạn sẽ nhớ từ lâu hơn.
             </p>
-            <div className="mt-4 rounded-2xl border border-white/60 bg-slate-950/90 p-4 font-mono text-sm text-slate-200">
-              Tìm cho tôi lộ trình 3 bữa. Tôi thích ăn cay. Bữa tối phải là quán hải sản không gian mở và phù hợp cho gia đình.
-            </div>
           </motion.div>
         </div>
       </section>
@@ -246,17 +248,17 @@ export default function GuidePage() {
           <div className="glass flex flex-col items-start justify-between gap-6 rounded-3xl p-8 shadow-soft transition hover:-translate-y-2 hover:shadow-glow md:flex-row md:items-center">
             <div className="space-y-3">
               <h3 className="font-display text-2xl font-semibold text-slate-900">
-                Sẵn sàng tạo lộ trình đầu tiên?
+                Sẵn sàng bắt đầu học?
               </h3>
               <p className="text-sm text-slate-600">
-                Bắt đầu ngay để AI đề xuất tuyến đường ẩm thực phù hợp nhất.
+                Vào trang Khám phá để chọn bộ từ vựng và phương pháp học phù hợp với bạn.
               </p>
             </div>
             <Link
-              href="/app"
+              href="/explore"
               className="rounded-full bg-gradient-to-r from-brand-coral to-brand-flame px-6 py-3 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5"
             >
-              Đã hiểu, Bắt đầu ngay!
+              Đã hiểu, Khám phá ngay!
             </Link>
           </div>
         </div>
