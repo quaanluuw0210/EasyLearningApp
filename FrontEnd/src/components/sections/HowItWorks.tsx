@@ -5,18 +5,18 @@ import { motion } from "framer-motion";
 const steps = [
   {
     title: "Bước 1",
-    detail: "Nhập vị trí và ngân sách.",
-    note: "BMI sẽ ghi nhớ điểm xuất phát để tối ưu quãng đường."
+    detail: "Vào trang Khám phá & chọn bộ từ.",
+    note: "Chọn khóa học và chủ đề từ vựng phù hợp với trình độ, mục tiêu của bạn."
   },
   {
     title: "Bước 2",
-    detail: "AI phân tích & Lọc dữ liệu.",
-    note: "Thuật toán cân bằng giá, khẩu vị và thời gian di chuyển."
+    detail: "Chọn phương pháp học yêu thích.",
+    note: "Xem danh sách từ vựng, học bằng Flashcard hoặc ôn theo Học ngắt quãng (SRS)."
   },
   {
     title: "Bước 3",
-    detail: "Trải nghiệm lộ trình hoàn hảo.",
-    note: "Xem bản đồ, lưu vé và chia sẻ ngay trong một chạm."
+    detail: "Ôn tập & ghi nhớ lâu dài.",
+    note: "Tiến trình học được lưu tự động, tiếp tục học mọi lúc mà không mất tiến độ."
   }
 ];
 
@@ -35,7 +35,7 @@ export default function HowItWorks() {
             Hướng dẫn nhanh
           </div>
           <h2 className="font-display text-3xl font-semibold text-slate-900 md:text-4xl">
-            3 bước để có lịch trình ẩm thực hoàn hảo.
+            3 bước để có lộ trình học từ vựng hiệu quả.
           </h2>
         </motion.div>
         <div className="mt-8 grid gap-6 md:grid-cols-3">

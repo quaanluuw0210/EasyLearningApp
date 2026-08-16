@@ -1,92 +1,104 @@
+import pandas as pd
 import json
-import os
+import re
 
-# ============================================================
-# CẤU HÌNH
-# ============================================================
+def clean_text(text):
+    if pd.isna(text):
+        return ""
+    return str(text).replace('\n', ' ').strip()
 
-INPUT_FILE = "ets_2026_data.json"
-OUTPUT_FILE = "ets_2026_data_new.json"
+def process_sheet_7(file_path, sheet_index=6, course_info=None):
+    if course_info is None:
+        course_info = {
+            "course_id": "drinks-vocab",
+            "title": "Từ Vựng Chuyên Về Đồ Uống",
+            "description": "Bộ từ vựng chuyên sâu về các loại đồ uống và pha chế"
+        }
 
+    course_id = course_info["course_id"]
+    df = pd.read_excel(file_path, sheet_name=sheet_index, header=None)
 
-# ============================================================
-# XỬ LÝ
-# ============================================================
+    topics = []
+    vocabularies = []
 
-def build_word_display(item):
-    """
-    Tạo wordDisplay từ:
-        word + partOfSpeech
+    current_topic_id = None
+    topic_order = 0
+    topic_word_count = 0
 
-    Ví dụ:
-        word = "carry"
-        partOfSpeech = "v"
+    for idx, row in df.iterrows():
+        col0 = clean_text(row[0])
+        col1 = clean_text(row[1]) if len(row) > 1 else ""
+        col2 = clean_text(row[2]) if len(row) > 2 else ""
 
-    => "carry (v)"
-    """
+        # Kiểm tra xem col0 có phải là tiêu đề hay không
+        # 1. Bắt đầu bằng 'Từ vựng', 'Các loại', 'Các món'...
+        # 2. Hoặc cột col0 có chữ nhưng cột col1 và col2 hoàn toàn trống
+        is_topic_header = (
+            re.match(r'^(Từ vựng|Các|Chủ đề|Bộ từ)', col0, re.IGNORECASE) is not None
+            or (bool(col0) and not col1 and not col2)
+        )
 
-    word = item.get("word", "").strip()
-    part_of_speech = item.get("partOfSpeech", "").strip()
+        if is_topic_header:
+            if current_topic_id and len(topics) > 0:
+                topics[-1]["totalWords"] = topic_word_count
 
-    if not word:
-        return None
+            topic_order += 1
+            current_topic_id = f"{course_id}-topic-{topic_order:02d}"
 
-    if part_of_speech:
-        return f"{word} ({part_of_speech})"
-
-    return word
-
-
-def fix_vocabularies(data):
-    count_added = 0
-    count_existing = 0
-    count_invalid = 0
-
-    vocabularies = data.get("vocabularies", [])
-
-    for vocab in vocabularies:
-
-        # Đã có wordDisplay
-        if vocab.get("wordDisplay"):
-            count_existing += 1
+            topics.append({
+                "topicId": current_topic_id,
+                "courseId": course_id,
+                "title": f"Chủ đề {topic_order}: {col0}",
+                "order": topic_order,
+                "totalWords": 0
+            })
+            topic_word_count = 0
             continue
 
-        word_display = build_word_display(vocab)
+        # Nếu là dòng từ vựng (col0: Từ vựng, col1: Phiên âm, col2: Nghĩa)
+        if col0 and current_topic_id:
+            word = col0
+            phonetic = col1 if col1.startswith('/') else ""
+            meaning = col2 if col1.startswith('/') else col1
 
-        if word_display:
-            vocab["wordDisplay"] = word_display
-            count_added += 1
-        else:
-            count_invalid += 1
+            topic_word_count += 1
+            vocab_id = f"vocab-{course_id}-{topic_order:02d}-{topic_word_count:03d}"
 
-    return count_added, count_existing, count_invalid
+            vocabularies.append({
+                "vocabId": vocab_id,
+                "courseId": course_id,
+                "topicId": current_topic_id,
+                "stt": topic_word_count,
+                "word": word,
+                "wordDisplay": word,
+                "partOfSpeech": "n",
+                "phonetic": phonetic,
+                "meaningVi": meaning,
+                "exampleSentence": ""
+            })
 
+    if current_topic_id and len(topics) > 0:
+        topics[-1]["totalWords"] = topic_word_count
 
-# ============================================================
-# MAIN
-# ============================================================
+    result = {
+        "courses": [{
+            "courseId": course_id,
+            "title": course_info["title"],
+            "description": course_info["description"],
+            "coverImage": f"/assets/images/{course_id}.png",
+            "totalTopics": len(topics),
+            "totalWords": len(vocabularies),
+            "isSystem": True,
+            "note": "Bộ từ vựng đồ uống phân theo chủ đề"
+        }],
+        "topics": topics,
+        "vocabularies": vocabularies
+    }
 
-if not os.path.exists(INPUT_FILE):
-    print(f"Không tìm thấy file: {INPUT_FILE}")
-    exit(1)
+    with open("sheet7_drinks_fixed.json", "w", encoding="utf-8") as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
 
-with open(INPUT_FILE, "r", encoding="utf-8") as f:
-    data = json.load(f)
+    print(f"✅ Đã xử lý Sheet 7 thành công: {len(topics)} chủ đề, {len(vocabularies)} từ vựng!")
 
-added, existing, invalid = fix_vocabularies(data)
-
-with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-    json.dump(
-        data,
-        f,
-        ensure_ascii=False,
-        indent=2
-    )
-
-print("==========================================")
-print("Đã xử lý xong!")
-print("==========================================")
-print(f"Đã thêm wordDisplay : {added}")
-print(f"Đã có sẵn           : {existing}")
-print(f"Không thể xử lý     : {invalid}")
-print(f"File output         : {OUTPUT_FILE}")
+# Chạy cập nhật lại Sheet 7
+process_sheet_7("list từ vựng.xlsx")

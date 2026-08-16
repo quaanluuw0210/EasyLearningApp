@@ -443,7 +443,7 @@ export default function MainDashboard({ courseIdFromUrl, topicIdFromUrl, modeFro
           <div className="z-10 flex items-center gap-2">
             {/* Nút Quay lại: Hiện icon trên mobile, đầy đủ chữ trên desktop */}
             <Link
-              href="/"
+              href="/explore"
               className="flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-slate-900 sm:px-3"
               title="Quay lại"
             >

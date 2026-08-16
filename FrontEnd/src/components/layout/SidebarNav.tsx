@@ -150,20 +150,22 @@ export default function SidebarNav({
                             : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                         }`}
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="truncate">{topic.title}</span>
-                          {topic.totalWords ? (
-                            <span
-                              className={`ml-2 shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium transition ${
-                                isActive
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : "bg-slate-100 text-slate-500"
-                              }`}
-                            >
-                              {topic.totalWords} từ
-                            </span>
-                          ) : null}
-                        </div>
+                       <div className="flex items-start justify-between gap-2">
+                        <span className="whitespace-normal break-words text-sm font-medium leading-snug">
+                          {topic.title}
+                        </span>
+                        {topic.totalWords ? (
+                          <span
+                            className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium transition ${
+                              isActive
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-slate-100 text-slate-500"
+                            }`}
+                          >
+                            {topic.totalWords} từ
+                          </span>
+                        ) : null}
+                      </div>
                       </button>
                     );
                   })}
