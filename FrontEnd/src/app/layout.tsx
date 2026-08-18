@@ -7,6 +7,9 @@ export const metadata: Metadata = {
   title: "VocabMaster | Học từ vựng tiếng Anh thông minh",
   description:
     "VocabMaster là ứng dụng học từ vựng tiếng Anh thông minh, giúp bạn nâng cao vốn từ vựng một cách hiệu quả và thú vị.",
+  icons: {
+    icon: "/assets/images/logo_title.png", // Đường dẫn tới file ảnh trong thư mục public/ (ví dụ: public/favicon.png)
+  },
 };
 
 export default function RootLayout({
