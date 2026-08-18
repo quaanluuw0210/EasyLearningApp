@@ -42,16 +42,12 @@ Dự án cung cấp 3 phương pháp tiếp cận từ vựng cốt lõi, phù h
 
 ### Backend
 - **Framework**: FastAPI (Python)
-- **AI/LLM**: Google Gemini API, Groq Cloud API
-- **Vector DB**: ChromaDB
-- **Embedding**: Sentence-Transformers (all-MiniLM-L6-v2)
 - **Database**: Firebase Firestore (User Profiles, Chat History, Comments)
 - **Libraries**: Pandas, Numpy, Pydantic, Httpx, Tenacity
 
 ### Frontend
 - **Framework**: Next.js 14 (App Router)
 - **Styling**: Tailwind CSS, Framer Motion
-- **Map**: MapLibre GL, React-map-gl
 - **State/Auth**: Firebase Auth, React Context API
 - **Components**: Lucide React, SweetAlert2
 
@@ -63,7 +59,6 @@ Dự án cung cấp 3 phương pháp tiếp cận từ vựng cốt lõi, phù h
 - Python 3.9 trở lên
 - Node.js 18 trở lên
 - Tài khoản Firebase (để lấy config)
-- API Keys: Google AI Studio (Gemini), Groq, Google Maps.
 
 ### 2. Cài đặt Backend
 ```bash
@@ -110,14 +105,14 @@ npm run dev
 ```text
 .
 ├── Back_End/               # Mã nguồn Backend
-│   ├── API/                # Các routes chính (Auth, Share, Main Pipeline)
-│   ├── Core/               # Logic cốt lõi (Parsing, Scoring, Filtering, AI)
+│   ├── API/                # Các routes chính (Auth, Main Pipeline)
+│   ├── Core/               # Logic cốt lõi 
 │   └── UnitTest/           # Các bản kiểm thử đơn vị
 ├── FrontEnd/               # Mã nguồn Frontend (Next.js)
 │   ├── src/app/            # Các trang giao diện
 │   ├── src/components/     # UI Components
 │   └── src/lib/            # API client và Utils
-├── data/                   # Dữ liệu JSON thô của các khu vực (HCM, HN, Đà Nẵng...)
+├── data/                   # Dữ liệu JSON thô của các bộ từ vựng
 ├── main.py                 # Entry point của FastAPI
 └── requirements.txt        # Các dependencies Python
 ```
