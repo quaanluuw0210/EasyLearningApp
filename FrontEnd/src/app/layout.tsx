@@ -2,7 +2,7 @@ import "./globals.css";
 import type { Metadata } from "next";
 import { AuthProvider } from "@/context/AuthContext";
 import AuthWrapper from "@/components/layout/AuthWrapper";
-
+import { Analytics } from "@vercel/analytics/next";
 export const metadata: Metadata = {
   title: "VocabMaster | Học từ vựng tiếng Anh thông minh",
   description:
@@ -20,6 +20,7 @@ export default function RootLayout({
   return (
     <html lang="vi">
       <body className="font-sans antialiased">
+        <Analytics />
         <AuthProvider>
           <AuthWrapper>
             {children}
