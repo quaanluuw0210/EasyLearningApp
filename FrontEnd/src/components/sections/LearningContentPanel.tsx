@@ -6,6 +6,7 @@ import FlashcardPanel from "@/components/sections/FlashcardPanel";
 import SrsPanel from "@/components/sections/SrsPanel";
 import VocabPanel from "@/components/sections/VocabPanel";
 import MatchingGamePanel from "@/components/sections/MatchingGamePanel";
+import SpellingGamePanel from "@/components/sections/SpellingGamePanel";
 import { LogIn } from "lucide-react";
 import Link from "next/link";
 type LearningContentPanelProps = {
@@ -92,6 +93,17 @@ export default function LearningContentPanel({
   if (mode === "matchingGame") {
     return (
       <MatchingGamePanel
+        courseId={selectedCourseId}
+        courseTitle={selectedCourseTitle}
+        topicId={selectedTopicId}
+        topicTitle={selectedTopicTitle}
+      />
+    );
+  }
+
+  if (mode === "spellingGame") {
+    return (
+      <SpellingGamePanel
         courseId={selectedCourseId}
         courseTitle={selectedCourseTitle}
         topicId={selectedTopicId}

@@ -1,7 +1,7 @@
-import { BookOpen, Brain, Sparkles, Gamepad2 } from "lucide-react";
+import { BookOpen, Brain, Sparkles, Gamepad2, Keyboard } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-export type LearningMethodId = "flashcard" | "srs" | "vocab" | "matchingGame";
+export type LearningMethodId = "flashcard" | "srs" | "vocab" | "matchingGame" | "spellingGame";
 
 export type LearningMethod = {
   id: LearningMethodId;
@@ -34,6 +34,12 @@ export const learningMethods: LearningMethod[] = [
     label: "Nối từ",
     description: "Trò chơi ghép cặp từ vựng",
     icon: Gamepad2,
+  },
+  {
+    id: "spellingGame",
+    label: "Điền từ",
+    description: "Luyện gõ từ vựng chính xác",
+    icon: Keyboard,
   },
 ];
 
