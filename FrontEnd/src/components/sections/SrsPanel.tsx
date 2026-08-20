@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, PartyPopper, RefreshCw, Volume2, Sparkles } from "lucide-react";
+import { CheckCircle2, PartyPopper, RefreshCw, Volume2, Clock } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { learningApi, VocabularyWithSRS } from "@/lib/api";
@@ -257,9 +257,9 @@ export default function SrsPanel({
     return { ...getIntervalLabelsForItem(ef, reps, ivl), ...intervalLabels };
   }, [currentWord, intervalLabels]);
 
-const counts = useMemo(() => {
-  return calculateAnkiCounts(sessionItems, sessionRatedIds);
-}, [sessionItems, sessionRatedIds]);
+  const counts = useMemo(() => {
+    return calculateAnkiCounts(sessionItems, sessionRatedIds);
+  }, [sessionItems, sessionRatedIds]);
 
   // Auto play audio when word changes
   useEffect(() => {
@@ -273,40 +273,53 @@ const counts = useMemo(() => {
   }, []);
 
   const handleRate = useCallback(
-  (rating: SrsRating) => {
-    if (!currentWord) return;
+    (rating: SrsRating) => {
+      if (!currentWord) return;
 
-    const activeCourseId =
-      currentWord.courseId || courseId || "default_course";
-    const activeTopicId =
-      currentWord.topicId || topicId || "default_topic";
-    const quality = RATING_TO_QUALITY[rating];
+      const activeCourseId =
+        currentWord.courseId || courseId || "default_course";
+      const activeTopicId =
+        currentWord.topicId || topicId || "default_topic";
+      const quality = RATING_TO_QUALITY[rating];
 
-    // 1. Compute SM2 locally (same logic as backend _calculate_sm2)
-    const currentEf = currentWord.easeFactor ?? currentWord.srs_progress?.ef ?? 2.5;
-    const currentReps = currentWord.repetitions ?? currentWord.srs_progress?.repetitions ?? 0;
-    const currentInterval = currentWord.interval ?? currentWord.srs_progress?.interval ?? 0;
-    const sm2 = calculateSm2(quality, currentEf, currentReps, currentInterval);
+      // 1. Compute SM2 locally (same logic as backend _calculate_sm2)
+      const currentEf = currentWord.easeFactor ?? currentWord.srs_progress?.ef ?? 2.5;
+      const currentReps = currentWord.repetitions ?? currentWord.srs_progress?.repetitions ?? 0;
+      const currentInterval = currentWord.interval ?? currentWord.srs_progress?.interval ?? 0;
+      const sm2 = calculateSm2(quality, currentEf, currentReps, currentInterval);
 
-    const reviewedAtStr = new Date().toISOString();
+      const reviewedAtStr = new Date().toISOString();
 
-    // 2. Enqueue for batch sync to backend
-    enqueueSrsReview(userId, {
-      courseId: activeCourseId,
-      topicId: activeTopicId,
-      vocabId: currentWord.id,
-      rating,
-      quality,
-      reviewedAt: reviewedAtStr,
-    });
+      // 2. Enqueue for batch sync to backend
+      enqueueSrsReview(userId, {
+        courseId: activeCourseId,
+        topicId: activeTopicId,
+        vocabId: currentWord.id,
+        rating,
+        quality,
+        reviewedAt: reviewedAtStr,
+      });
 
-    // 3. Save full SM2 state to localStorage for offline recovery
-    saveLocalSrsItemState(
-      activeCourseId,
-      activeTopicId,
-      userId,
-      currentWord.id,
-      {
+      // 3. Save full SM2 state to localStorage for offline recovery
+      saveLocalSrsItemState(
+        activeCourseId,
+        activeTopicId,
+        userId,
+        currentWord.id,
+        {
+          lastReviewedAt: reviewedAtStr,
+          quality,
+          easeFactor: sm2.ef,
+          repetitions: sm2.repetitions,
+          interval: sm2.interval,
+          nextReviewDate: sm2.nextReviewDate,
+          nextReview: sm2.nextReviewDate,
+        }
+      );
+
+      // 4. Build updated word with full SM2 state for instant UI update
+      const updatedWord: VocabularyItem = {
+        ...currentWord,
         lastReviewedAt: reviewedAtStr,
         quality,
         easeFactor: sm2.ef,
@@ -314,78 +327,65 @@ const counts = useMemo(() => {
         interval: sm2.interval,
         nextReviewDate: sm2.nextReviewDate,
         nextReview: sm2.nextReviewDate,
-      }
-    );
+        srs_progress: {
+          ef: sm2.ef,
+          repetitions: sm2.repetitions,
+          interval: sm2.interval,
+          nextReviewDate: sm2.nextReviewDate,
+          lastReviewedAt: reviewedAtStr,
+          quality,
+        },
+      };
 
-    // 4. Build updated word with full SM2 state for instant UI update
-    const updatedWord: VocabularyItem = {
-      ...currentWord,
-      lastReviewedAt: reviewedAtStr,
-      quality,
-      easeFactor: sm2.ef,
-      repetitions: sm2.repetitions,
-      interval: sm2.interval,
-      nextReviewDate: sm2.nextReviewDate,
-      nextReview: sm2.nextReviewDate,
-      srs_progress: {
-        ef: sm2.ef,
-        repetitions: sm2.repetitions,
-        interval: sm2.interval,
-        nextReviewDate: sm2.nextReviewDate,
-        lastReviewedAt: reviewedAtStr,
-        quality,
-      },
-    };
+      setSessionItems((prevItems) =>
+        prevItems.map((item) =>
+          item.id === currentWord.id ? updatedWord : item
+        )
+      );
 
-    setSessionItems((prevItems) =>
-      prevItems.map((item) =>
-        item.id === currentWord.id ? updatedWord : item
-      )
-    );
+      onRate?.(currentWord, rating);
+      scheduleSync();
 
-    onRate?.(currentWord, rating);
-    scheduleSync();
+      setSessionRatedIds((prev) => {
+        const next = new Set(prev);
+        next.add(currentWord.id);
+        return next;
+      });
 
-    setSessionRatedIds((prev) => {
-      const next = new Set(prev);
-      next.add(currentWord.id);
-      return next;
-    });
+      setReviewedCount((c) => c + 1);
+      setIsFlipped(false);
 
-    setReviewedCount((c) => c + 1);
-    setIsFlipped(false);
+      setQueue((prevQueue) => {
+        const [, ...remaining] = prevQueue;
 
-    setQueue((prevQueue) => {
-      const [, ...remaining] = prevQueue;
+        let nextQueue: VocabularyItem[];
 
-      let nextQueue: VocabularyItem[];
+        if (rating === "again" || rating === "hard") {
+          nextQueue = [
+            ...remaining,
+            updatedWord,
+          ];
+        } else {
+          nextQueue = remaining;
+        }
 
-      if (rating === "again" || rating === "hard") {
-        nextQueue = [
-          ...remaining,
-          updatedWord,
-        ];
-      } else {
-        nextQueue = remaining;
-      }
+        if (nextQueue.length === 0) {
+          setTimeout(() => triggerBatchSync(), 50);
+        }
 
-      if (nextQueue.length === 0) {
-        setTimeout(() => triggerBatchSync(), 50);
-      }
-
-      return nextQueue;
-    });
-  },
-  [
-    currentWord,
-    courseId,
-    topicId,
-    userId,
-    onRate,
-    scheduleSync,
-    triggerBatchSync,
-  ]
-);
+        return nextQueue;
+      });
+    },
+    [
+      currentWord,
+      courseId,
+      topicId,
+      userId,
+      onRate,
+      scheduleSync,
+      triggerBatchSync,
+    ]
+  );
 
   // Keyboard Shortcuts Handler — chỉ còn phím 1-4 để đánh giá sau khi đã lật.
   // Đã bỏ Space/Enter để lật thẻ theo yêu cầu (chỉ chạm/click vào thẻ mới lật).
@@ -462,7 +462,7 @@ const counts = useMemo(() => {
           )}
         </div>
       </div>
-    );  
+    );
   }
 
   return (
@@ -640,3 +640,4 @@ const counts = useMemo(() => {
     </div>
   );
 }
+

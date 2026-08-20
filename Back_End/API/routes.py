@@ -226,107 +226,58 @@ def _calculate_sm2(
 
     now = get_utc_now()
 
-    # =====================================================
     # 1. Cập nhật Ease Factor
-    # =====================================================
-
     ef_prime = ef + (
         0.1
         - (5 - quality)
         * (0.08 + (5 - quality) * 0.02)
     )
-
     ef_prime = max(1.3, ef_prime)
 
-    # =====================================================
-    # 2. AGAIN → 1 phút
-    # =====================================================
-
-    if quality == 1:
-        repetitions = 0
-        interval = 0
-
-        next_review_date = now + timedelta(minutes=1)
-
-        return (
-            ef_prime,
-            repetitions,
-            interval,
-            next_review_date,
-        )
-
-    # =====================================================
-    # 3. HARD → 6 phút
-    # =====================================================
-
-    if quality == 2:
-        repetitions = 0
-        interval = 0
-
-        next_review_date = now + timedelta(minutes=6)
-
-        return (
-            ef_prime,
-            repetitions,
-            interval,
-            next_review_date,
-        )
-
-    # =====================================================
-    # 4. GOOD → LUÔN LUÔN 10 PHÚT
-    # =====================================================
-
-    if quality == 3:
-        repetitions += 1
-        interval = 0
-
-        next_review_date = now + timedelta(minutes=10)
-
-        return (
-            ef_prime,
-            repetitions,
-            interval,
-            next_review_date,
-        )
-
-    # =====================================================
-    # 5. EASY
-    # =====================================================
-
-    if quality == 4:
-
-        # Easy lần đầu → 5 ngày
-        if repetitions == 0:
+    # 2. Phân loại theo Phase
+    if repetitions == 0:
+        # Learning Phase (Học từ mới/thẻ học lại)
+        if quality == 1:    # AGAIN
+            repetitions = 0
+            interval = 0
+            next_review_date = now + timedelta(minutes=1)
+        elif quality == 2:  # HARD
+            repetitions = 0
+            interval = 0
+            next_review_date = now + timedelta(minutes=6)
+        elif quality == 3:  # GOOD (Tốt nghiệp Learning Phase)
             repetitions = 1
-            interval = 5
-
-        # Easy sau khi đã Good nhiều lần
+            interval = 1
+            next_review_date = now + timedelta(days=1)
+        elif quality == 4:  # EASY (Tốt nghiệp nhảy vọt)
+            repetitions = 1
+            interval = 4
+            next_review_date = now + timedelta(days=4)
         else:
-            interval = max(
-                1,
-                round(
-                    max(interval, 1) * ef_prime
-                )
-            )
-
+            next_review_date = now
+    else:
+        # Review Phase (Ôn tập theo ngày)
+        if quality == 1:    # AGAIN (Reset về Learning Phase)
+            repetitions = 0
+            interval = 0
+            next_review_date = now + timedelta(minutes=1)
+        elif quality == 2:  # HARD
             repetitions += 1
+            interval = max(1, round(interval * 1.2))
+            next_review_date = now + timedelta(days=interval)
+        elif quality == 3:  # GOOD
+            repetitions += 1
+            interval = max(1, round(interval * ef_prime))
+            next_review_date = now + timedelta(days=interval)
+        elif quality == 4:  # EASY
+            repetitions += 1
+            interval = max(1, round(interval * ef_prime * 1.3))
+            next_review_date = now + timedelta(days=interval)
+        else:
+            next_review_date = now
 
-        next_review_date = now + timedelta(days=interval)
+    return ef_prime, repetitions, interval, next_review_date
 
-        return (
-            ef_prime,
-            repetitions,
-            interval,
-            next_review_date,
-        )
-
-    # Fallback
-    return (
-        ef_prime,
-        repetitions,
-        interval,
-        now,
-    )
 
 def _get_course_progress_document_ref(user_id: str, course_id: str):
     return db.collection("users").document(user_id).collection("course_progress").document(course_id)
@@ -336,7 +287,8 @@ def _get_topic_document_ref(user_id: str, course_id: str, topic_id: str):
     return _get_course_progress_document_ref(user_id, course_id).collection("topic_progress").document(topic_id)
 
 
-def _mark_course_progress_updated(user_id: str, course_id: str, updated_at: datetime):
+
+async def _mark_course_progress_updated(user_id: str, course_id: str, updated_at: datetime):
     if db is None:
         return
 
@@ -345,7 +297,7 @@ def _mark_course_progress_updated(user_id: str, course_id: str, updated_at: date
     def write_doc():
         course_ref.set({"updatedAt": updated_at}, merge=True)
 
-    asyncio.to_thread(write_doc)
+    await asyncio.to_thread(write_doc)
 
 
 async def _get_topic_progress(user_id: str, course_id: str, topic_id: str) -> dict:

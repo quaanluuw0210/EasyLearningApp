@@ -589,7 +589,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { Keyboard, Volume2, Eye, EyeOff, Sparkles, ArrowRight, RotateCcw, Trophy, AlertCircle, CheckCircle } from "lucide-react";
+import { Clock, Keyboard, Volume2, Eye, EyeOff, Sparkles, ArrowRight, RotateCcw, Trophy, AlertCircle } from "lucide-react";
 import { learningApi, VocabularyWithSRS } from "@/lib/api";
 
 type SpellingGamePanelProps = {
@@ -644,7 +644,7 @@ export default function SpellingGamePanel({
   const [skipCount, setSkipCount] = useState(0);
   const [hintsUsedCount, setHintsUsedCount] = useState(0);
   const [hasUsedHintForCurrentWord, setHasUsedHintForCurrentWord] = useState(false);
-
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Lấy dữ liệu từ vựng
@@ -681,6 +681,18 @@ export default function SpellingGamePanel({
     };
   }, [courseId, topicId, user?.uid]);
 
+  // Đếm thời gian đã chơi (tăng dần mỗi giây)
+  useEffect(() => {
+    if (playQueue.length === 0) return; // chưa có ván chơi thì không đếm
+    if (currentIndex >= playQueue.length) return; // đã hoàn thành thì dừng đếm
+
+    const timer = setInterval(() => {
+      setElapsedSeconds(prev => prev + 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [playQueue.length, currentIndex]);
+
   // Khởi tạo trò chơi
   const initGame = useCallback((vocabList: VocabularyWithSRS[]) => {
     if (vocabList.length === 0) return;
@@ -696,6 +708,7 @@ export default function SpellingGamePanel({
     setSkipCount(0);
     setHintsUsedCount(0);
     setHasUsedHintForCurrentWord(false);
+    setElapsedSeconds(0);
   }, []);
 
   // Tự động khởi chạy game khi tải xong từ vựng
@@ -725,6 +738,12 @@ export default function SpellingGamePanel({
     const typed = value.trim().toLowerCase();
     return typed === target;
   }, [currentWord]);
+
+  function formatTime(totalSeconds: number) {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -904,9 +923,8 @@ export default function SpellingGamePanel({
     return (
       <div className="flex h-full flex-col items-center justify-center gap-6 p-6 text-center">
         <div className="flex h-20 w-20 items-center justify-center rounded-full bg-amber-100 text-amber-500 shadow-inner">
-          <Trophy size={48} className="animate-bounce" />
+          <Trophy size={36} className="animate-bounce" />
         </div>
-
         <div className="space-y-2">
           <h2 className="text-2xl font-black text-slate-800">Hoàn thành thử thách!</h2>
           <p className="text-sm font-semibold text-slate-500">Bạn đã hoàn thành toàn bộ từ vựng trong chủ đề này.</p>
@@ -930,6 +948,10 @@ export default function SpellingGamePanel({
             <span className="font-semibold text-slate-500">Gợi ý đã dùng:</span>
             <span className="font-bold text-indigo-500">{hintsUsedCount}</span>
           </div>
+          <div className="flex items-center justify-between text-sm border-b border-slate-100 pb-2">
+            <span className="font-semibold text-slate-500">Thời gian hoàn thành:</span>
+            <span className="font-bold text-amber-600 tabular-nums">{formatTime(elapsedSeconds)}</span>
+          </div>
           <div className="flex items-center justify-between pt-1">
             <span className="text-base font-black text-indigo-950">Tổng điểm số:</span>
             <span className="text-xl font-black text-indigo-600">{score}</span>
@@ -952,38 +974,57 @@ export default function SpellingGamePanel({
   return (
     <div className="flex h-full flex-col gap-4 overflow-hidden">
       {/* 1. Header Banner & Info (Phiên bản siêu gọn) */}
-      <div className="flex shrink-0 items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-yellow-500/10 px-3 py-2">
+      <div className="flex shrink-0 items-center justify-between gap-1.5 sm:gap-3 rounded-2xl border border-slate-200/80 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-yellow-500/10 px-2 sm:px-3 py-2">
 
         {/* Stats Dashboard - Gom thành 1 hàng nhỏ gọn bên trái */}
-        <div className="flex items-center gap-2.5 rounded-xl border border-white/60 bg-white/70 px-3 py-1 text-center backdrop-blur-sm shadow-xs">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-bold text-slate-400">Đúng:</span>
-            <span className="text-xs font-extrabold text-emerald-600">{correctCount}</span>
+        <div className="flex items-center gap-1.5 sm:gap-2.5 rounded-xl border border-white/60 bg-white/70 px-1.5 sm:px-3 py-1 text-center backdrop-blur-sm shadow-xs overflow-x-auto min-w-0">
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="text-[9px] sm:text-[10px] font-bold text-slate-400">
+              <span className="hidden sm:inline">Đúng</span>
+              <span className="sm:hidden">Đ</span>:
+            </span>
+            <span className="text-[11px] sm:text-xs font-extrabold text-emerald-600">{correctCount}</span>
           </div>
 
-          <span className="h-3 w-[1px] bg-slate-200" />
+          <span className="h-3 w-[1px] bg-slate-200 shrink-0" />
 
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-bold text-slate-400">Bỏ qua:</span>
-            <span className="text-xs font-extrabold text-rose-500">{skipCount}</span>
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="text-[9px] sm:text-[10px] font-bold text-slate-400">
+              <span className="hidden sm:inline">Bỏ qua</span>
+              <span className="sm:hidden">B</span>:
+            </span>
+            <span className="text-[11px] sm:text-xs font-extrabold text-rose-500">{skipCount}</span>
           </div>
 
-          <span className="h-3 w-[1px] bg-slate-200" />
+          <span className="h-3 w-[1px] bg-slate-200 shrink-0" />
 
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-bold text-slate-400">Điểm:</span>
-            <span className="text-xs font-extrabold text-slate-800">{score}</span>
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="text-[9px] sm:text-[10px] font-bold text-slate-400">
+              <span className="hidden sm:inline">Điểm</span>
+              <span className="sm:hidden">Đ</span>:
+            </span>
+            <span className="text-[11px] sm:text-xs font-extrabold text-slate-800">{score}</span>
+          </div>
+
+          <span className="h-3 w-[1px] bg-slate-200 shrink-0" />
+
+          {/* Đồng hồ đếm thời gian */}
+          <div className="flex items-center gap-1 shrink-0">
+            <Clock size={10} className="text-slate-400 shrink-0" />
+            <span className="text-[11px] sm:text-xs font-extrabold text-slate-800 tabular-nums">
+              {formatTime(elapsedSeconds)}
+            </span>
           </div>
         </div>
 
-        {/* Nút Chơi lại - Thu nhỏ size & icon */}
+        {/* Nút Chơi lại - Ẩn chữ trên mobile, chỉ hiện icon */}
         <button
           onClick={() => initGame(allVocabs)}
-          className="flex shrink-0 items-center gap-1 rounded-lg border border-amber-200/60 bg-white px-2.5 py-1 text-[11px] font-bold text-amber-700 shadow-xs transition hover:bg-amber-50 active:scale-95"
+          className="flex shrink-0 items-center gap-1 rounded-lg border border-amber-200/60 bg-white px-2 sm:px-2.5 py-1 text-[11px] font-bold text-amber-700 shadow-xs transition hover:bg-amber-50 active:scale-95"
           title="Chơi lại từ đầu"
         >
           <RotateCcw size={12} />
-          <span>Chơi lại</span>
+          <span className="hidden sm:inline">Chơi lại</span>
         </button>
 
       </div>

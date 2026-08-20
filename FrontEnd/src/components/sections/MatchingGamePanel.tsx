@@ -437,7 +437,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { Gamepad2, RotateCcw, Trophy, CheckCircle2, AlertCircle, Heart, XCircle, PartyPopper } from "lucide-react";
+import { Gamepad2, RotateCcw, Trophy, CheckCircle2, AlertCircle, Heart, XCircle, PartyPopper, Clock } from "lucide-react";
 import { learningApi, VocabularyWithSRS } from "@/lib/api";
 
 type MatchingGamePanelProps = {
@@ -493,7 +493,7 @@ export default function MatchingGamePanel({
   const [roundCount, setRoundCount] = useState(1);
   const [lives, setLives] = useState(MAX_LIVES);
   const [isGameOver, setIsGameOver] = useState(false);
-
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   // State đánh dấu đã hoàn thành toàn bộ từ vựng trong topic
   const [isCompleted, setIsCompleted] = useState(false);
 
@@ -556,6 +556,8 @@ export default function MatchingGamePanel({
 
     window.speechSynthesis.speak(utterance);
   }, []);
+
+
   // Hàm khởi tạo lượt chơi mới (chơi lại từ đầu, reset toàn bộ điểm/mạng/trạng thái)
   const initGame = useCallback((vocabList: VocabularyWithSRS[]) => {
     if (vocabList.length === 0) return;
@@ -579,7 +581,24 @@ export default function MatchingGamePanel({
     setLives(MAX_LIVES);
     setIsGameOver(false);
     setIsCompleted(false);
+    setElapsedSeconds(0); // Reset thời gian
   }, []);
+  function formatTime(totalSeconds: number) {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+  }
+
+  useEffect(() => {
+    if (allVocabs.length === 0) return;
+    if (isGameOver || isCompleted) return;
+
+    const timer = setInterval(() => {
+      setElapsedSeconds(prev => prev + 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [allVocabs.length, isGameOver, isCompleted]);
 
   // Tự động khởi chạy game khi tải xong danh sách từ
   useEffect(() => {
@@ -587,6 +606,18 @@ export default function MatchingGamePanel({
       initGame(allVocabs);
     }
   }, [allVocabs, initGame]);
+
+  // Đếm thời gian đã chơi (tăng dần mỗi giây)
+  useEffect(() => {
+    if (allVocabs.length === 0) return; // chưa có ván chơi thì không đếm
+    if (isCompleted) return; // đã hoàn thành thì dừng đếm
+
+    const timer = setInterval(() => {
+      setElapsedSeconds(prev => prev + 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [allVocabs.length, isCompleted]);
 
   // Hàm chuyển sang lượt tiếp theo (Next Round)
   const nextRound = useCallback(() => {
@@ -754,13 +785,15 @@ export default function MatchingGamePanel({
             {topicTitle || "Nối từ vựng"}
           </h2>
         </div>
-
         <div className="flex shrink-0 items-center gap-2.5 text-xs font-bold text-slate-700 sm:gap-3">
           <span className="inline-flex items-center gap-1" title="Điểm số">
             <Trophy size={13} className="text-amber-500" /> {score}
           </span>
           <span className="inline-flex items-center gap-1" title="Mạng còn lại">
             <Heart size={13} className="text-rose-500" /> {lives}/{MAX_LIVES}
+          </span>
+          <span className="inline-flex items-center gap-1 tabular-nums" title="Thời gian chơi">
+            <Clock size={13} className="text-indigo-500" /> {formatTime(elapsedSeconds)}
           </span>
           <span className="hidden text-[10px] font-semibold text-slate-400 sm:inline">
             Vòng {roundCount}
@@ -882,7 +915,7 @@ export default function MatchingGamePanel({
               </p>
             </div>
 
-            <div className="mt-1 grid w-full grid-cols-3 gap-2 rounded-2xl bg-slate-50 p-3">
+            <div className="mt-1 grid w-full grid-cols-4 gap-2 rounded-2xl bg-slate-50 p-3">
               {/* Điểm */}
               <div className="flex flex-col items-center">
                 <p className="text-[10px] font-bold uppercase text-slate-400">
@@ -914,6 +947,10 @@ export default function MatchingGamePanel({
                   {lives}
                 </p>
               </div>
+              <div className="flex flex-col items-center">
+                <p className="text-[10px] font-bold uppercase text-slate-400">Thời gian</p>
+                <p className="text-base font-black text-slate-700">{formatTime(elapsedSeconds)}</p>
+              </div>
             </div>
 
             <p className="text-xs font-semibold text-slate-600 mt-1">
@@ -944,7 +981,7 @@ export default function MatchingGamePanel({
               </p>
             </div>
 
-            <div className="mt-1 grid w-full grid-cols-2 gap-2 rounded-2xl bg-slate-50 p-3">
+            <div className="mt-1 grid w-full grid-cols-3 gap-2 rounded-2xl bg-slate-50 p-3">
               <div>
                 <p className="text-[10px] font-bold uppercase text-slate-400">Điểm đạt được</p>
                 <p className="text-base font-black text-slate-800">{score}</p>
@@ -952,6 +989,10 @@ export default function MatchingGamePanel({
               <div>
                 <p className="text-[10px] font-bold uppercase text-slate-400">Số vòng</p>
                 <p className="text-base font-black text-slate-800">{roundCount}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase text-slate-400">Thời gian</p>
+                <p className="text-base font-black text-slate-800">{formatTime(elapsedSeconds)}</p>
               </div>
             </div>
 

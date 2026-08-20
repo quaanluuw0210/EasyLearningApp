@@ -60,8 +60,6 @@ export const RATING_INTERVAL_LABELS: Record<SrsRating, string> = {
   easy: "5d",
 };
 
-// ─── Frontend mirror of backend _calculate_sm2 ───────────────────────
-
 export interface Sm2Result {
   ef: number;
   repetitions: number;
@@ -81,66 +79,60 @@ export function calculateSm2(
 ): Sm2Result {
   const now = new Date();
 
+  // 1. Cập nhật Ease Factor (giới hạn EF_min = 1.3)
   let efPrime = ef + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
   efPrime = Math.max(1.3, efPrime);
 
-  // AGAIN (quality === 1) → 1 minute
-  if (quality === 1) {
-    return {
-      ef: efPrime,
-      repetitions: 0,
-      interval: 0,
-      nextReviewDate: new Date(now.getTime() + 1 * 60_000).toISOString(),
-    };
-  }
+  let newReps = repetitions;
+  let newInterval = interval;
+  let nextReviewDate = now;
 
-  // HARD (quality === 2) → 6 minutes
-  if (quality === 2) {
-    return {
-      ef: efPrime,
-      repetitions: 0,
-      interval: 0,
-      nextReviewDate: new Date(now.getTime() + 6 * 60_000).toISOString(),
-    };
-  }
-
-  // GOOD (quality === 3) → 10 minutes
-  if (quality === 3) {
-    return {
-      ef: efPrime,
-      repetitions: repetitions + 1,
-      interval: 0,
-      nextReviewDate: new Date(now.getTime() + 10 * 60_000).toISOString(),
-    };
-  }
-
-  // EASY (quality === 4)
-  if (quality === 4) {
-    let newReps = repetitions;
-    let newInterval = interval;
-
-    if (repetitions === 0) {
+  // 2. Phân loại theo Phase
+  if (repetitions === 0) {
+    // Learning Phase (Học từ mới/thẻ học lại)
+    if (quality === 1) {        // AGAIN
+      newReps = 0;
+      newInterval = 0;
+      nextReviewDate = new Date(now.getTime() + 1 * 60_000);
+    } else if (quality === 2) { // HARD
+      newReps = 0;
+      newInterval = 0;
+      nextReviewDate = new Date(now.getTime() + 6 * 60_000);
+    } else if (quality === 3) { // GOOD (Tốt nghiệp Learning Phase)
       newReps = 1;
-      newInterval = 5;
-    } else {
-      newInterval = Math.max(1, Math.round(Math.max(interval, 1) * efPrime));
-      newReps = repetitions + 1;
+      newInterval = 1;
+      nextReviewDate = new Date(now.getTime() + 1 * 24 * 60 * 60 * 1000);
+    } else if (quality === 4) { // EASY (Tốt nghiệp nhảy vọt)
+      newReps = 1;
+      newInterval = 4;
+      nextReviewDate = new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000);
     }
-
-    return {
-      ef: efPrime,
-      repetitions: newReps,
-      interval: newInterval,
-      nextReviewDate: new Date(now.getTime() + newInterval * 86_400_000).toISOString(),
-    };
+  } else {
+    // Review Phase (Ôn tập theo ngày)
+    if (quality === 1) {        // AGAIN (Reset về Learning Phase)
+      newReps = 0;
+      newInterval = 0;
+      nextReviewDate = new Date(now.getTime() + 1 * 60_000);
+    } else if (quality === 2) { // HARD
+      newReps = repetitions + 1;
+      newInterval = Math.max(1, Math.round(interval * 1.2));
+      nextReviewDate = new Date(now.getTime() + newInterval * 24 * 60 * 60 * 1000);
+    } else if (quality === 3) { // GOOD
+      newReps = repetitions + 1;
+      newInterval = Math.max(1, Math.round(interval * efPrime));
+      nextReviewDate = new Date(now.getTime() + newInterval * 24 * 60 * 60 * 1000);
+    } else if (quality === 4) { // EASY
+      newReps = repetitions + 1;
+      newInterval = Math.max(1, Math.round(interval * efPrime * 1.3));
+      nextReviewDate = new Date(now.getTime() + newInterval * 24 * 60 * 60 * 1000);
+    }
   }
 
-  // Fallback
   return {
     ef: efPrime,
-    repetitions,
-    interval,
-    nextReviewDate: now.toISOString(),
+    repetitions: newReps,
+    interval: newInterval,
+    nextReviewDate: nextReviewDate.toISOString(),
   };
 }
 
@@ -152,14 +144,28 @@ export function getIntervalLabelsForItem(
   repetitions: number,
   interval: number,
 ): Record<SrsRating, string> {
-  const easyResult = calculateSm2(4, ef, repetitions, interval);
+  const resultAgain = calculateSm2(1, ef, repetitions, interval);
+  const resultHard = calculateSm2(2, ef, repetitions, interval);
+  const resultGood = calculateSm2(3, ef, repetitions, interval);
+  const resultEasy = calculateSm2(4, ef, repetitions, interval);
+
+  const format = (res: Sm2Result, quality: number) => {
+    if (res.interval > 0) {
+      return `${res.interval}d`;
+    }
+    if (quality === 1) return "1m";
+    if (quality === 2) return "6m";
+    return "10m";
+  };
+
   return {
-    again: "1m",
-    hard: "6m",
-    good: "10m",
-    easy: `${easyResult.interval}d`,
+    again: format(resultAgain, 1),
+    hard: format(resultHard, 2),
+    good: format(resultGood, 3),
+    easy: format(resultEasy, 4),
   };
 }
+
 
 /**
  * Storage keys helper
