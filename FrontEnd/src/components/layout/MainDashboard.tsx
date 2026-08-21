@@ -38,7 +38,7 @@ import type { LearningMethodId } from "@/lib/learningMockData";
 //   };
 // };
 
-const link_back_end="https://easylearningapp.onrender.com/"
+const link_back_end = "https://easylearningapp.onrender.com/"
 
 type MainDashboardProps = {
   courseIdFromUrl?: string;
@@ -204,7 +204,7 @@ export default function MainDashboard({ courseIdFromUrl, topicIdFromUrl, modeFro
   //   }
   // };
 
-  
+
 
   // const fetchChatMessages = async (chatId: string) => {
   //   if (!user?.uid) return;
@@ -422,7 +422,7 @@ export default function MainDashboard({ courseIdFromUrl, topicIdFromUrl, modeFro
   // ────────── Render ──────────
 
   const itineraryPanelProps = {
-    
+
     selectedRestaurantId,
     currentTab: itineraryTab,
     onSelectRestaurant: handleRestaurantSelect,
@@ -440,29 +440,29 @@ export default function MainDashboard({ courseIdFromUrl, topicIdFromUrl, modeFro
       <nav className="relative flex items-center justify-between border-b border-slate-200/60 bg-slate-50/70 px-4 py-3 backdrop-blur sm:px-6">
 
         {/* Left: menu toggle + back link */}
-          <div className="z-10 flex items-center gap-2">
-            {/* Nút Quay lại: Hiện icon trên mobile, đầy đủ chữ trên desktop */}
-            <Link
-              href="/explore"
-              className="flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-slate-900 sm:px-3"
-              title="Quay lại"
-            >
-              <ArrowLeft size={18} />
-              <span className="hidden sm:inline">Quay lại</span>
-            </Link>
+        <div className="z-10 flex items-center gap-2">
+          {/* Nút Quay lại: Hiện icon trên mobile, đầy đủ chữ trên desktop */}
+          <Link
+            href="/explore"
+            className="flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-slate-900 sm:px-3"
+            title="Quay lại"
+          >
+            <ArrowLeft size={18} />
+            <span className="hidden sm:inline">Quay lại</span>
+          </Link>
 
-            {/* Toggle left sidebar */}
-            <button
-              type="button"
-              onClick={handleSidebarToggle}
-              title={sidebarOpen ? "Ẩn cột trái" : "Hiện cột trái"}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-100"
-            >
-              {(isMobile ? mobileSidebarOpen : sidebarOpen)
-                ? <PanelLeftClose size={18} />
-                : <PanelLeftOpen size={18} />}
-            </button>
-          </div>
+          {/* Toggle left sidebar */}
+          <button
+            type="button"
+            onClick={handleSidebarToggle}
+            title={sidebarOpen ? "Ẩn cột trái" : "Hiện cột trái"}
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-100"
+          >
+            {(isMobile ? mobileSidebarOpen : sidebarOpen)
+              ? <PanelLeftClose size={18} />
+              : <PanelLeftOpen size={18} />}
+          </button>
+        </div>
 
         {/* Center: Logo */}
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
@@ -542,7 +542,7 @@ export default function MainDashboard({ courseIdFromUrl, topicIdFromUrl, modeFro
           )}
           <div className="min-h-0 flex-1">
             <SidebarNav
-        
+
               onOpenProfileSettings={handleProfileOpen}
               onTabChange={handleItineraryTabChange}
               currentChatId={currentChatId}
@@ -565,7 +565,7 @@ export default function MainDashboard({ courseIdFromUrl, topicIdFromUrl, modeFro
         {/* Main content area */}
         <main className="flex flex-1 min-h-0 flex-col overflow-hidden bg-slate-50 /70">
           <ChatInterface
-    
+
             chatId={currentChatId}
 
             onRestaurantSelect={handleRestaurantSelect}
@@ -615,10 +615,6 @@ export default function MainDashboard({ courseIdFromUrl, topicIdFromUrl, modeFro
       {mobileItineraryOpen && (
         <div className="fixed inset-0 z-40 flex flex-col bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
           <div className="flex items-center justify-between border-b border-slate-200/60 px-4 py-3">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">Lịch trình</p>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-400">Tổng hợp</p>
-            </div>
             <button
               type="button"
               onClick={() => setMobileItineraryOpen(false)}

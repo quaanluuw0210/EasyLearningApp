@@ -82,19 +82,6 @@ export default function VocabPanel({
   return (
     /* ĐÃ SỬA: Đổi flex-col gap-5 thành h-full flex flex-col gap-4 overflow-hidden */
     <div className="flex h-full flex-col gap-4 overflow-hidden">
-      
-      {/* 1. Header Banner (Chiều cao cố định) */}
-      <div className="flex shrink-0 items-center gap-3.5 rounded-[28px] border border-slate-200/80 bg-gradient-to-r from-teal-500/10 via-sky-500/10 to-indigo-500/10 p-4">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-teal-500 text-white shadow-md shadow-teal-500/20">
-          <BookOpen size={20} />
-        </div>
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-wider text-teal-700">
-            Danh sách từ vựng của bạn
-          </p>
-        </div>
-      </div>
-
       {/* 2. Thanh tìm kiếm (Chiều cao cố định) */}
       <div className="relative shrink-0">
         <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
